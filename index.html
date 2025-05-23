@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>영수증 스캐너</title>
+    <!-- Tesseract.js 추가 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -56,6 +58,8 @@
         .btn:disabled { background: #ccc; cursor: not-allowed; }
         .btn-upload { background: #28a745; }
         .btn-upload:active { background: #1e7e34; }
+        .btn-export { background: #17a2b8; }
+        .btn-export:active { background: #117a8b; }
         input[type="file"] { display: none; }
         .results {
             background: #f8f9fa;
@@ -118,6 +122,20 @@
             font-family: monospace;
             font-size: 12px;
         }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #007bff;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
         @media (max-width: 600px) {
             .header h1 { font-size: 2em; }
             .main-content { padding: 20px; }
@@ -149,6 +167,9 @@
             <div class="loading" id="loading">
                 <div class="spinner"></div>
                 <p id="loadingText">분석 중입니다...</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
             </div>
             
             <div class="results" id="results">
@@ -175,6 +196,10 @@
                     <span class="result-label">📋 적요</span>
                     <span class="result-value" id="resultCategory">-</span>
                 </div>
+                
+                <button class="btn btn-export" id="exportBtn">📊 현재 항목 엑셀로 저장</button>
+                <button class="btn btn-export" id="exportAllBtn" style="background: #dc3545;">📊 전체 목록 엑셀로 저장</button>
+                <button class="btn" id="addMoreBtn" style="background: #6c757d;">➕ 추가 영수증 스캔</button>
             </div>
             
             <div class="status">
@@ -189,6 +214,8 @@
         // 전역 변수
         let stream = null;
         let capturedImage = null;
+        let currentResult = null;
+        let allResults = []; // 모든 영수증 데이터 저장
         
         // 상태 업데이트
         function updateStatus(message) {
@@ -197,6 +224,14 @@
                 statusEl.textContent = message;
             }
             console.log('상태:', message);
+        }
+        
+        // 진행률 업데이트
+        function updateProgress(percent) {
+            const progressFill = document.getElementById('progressFill');
+            if (progressFill) {
+                progressFill.style.width = percent + '%';
+            }
         }
         
         // 카메라 시작
@@ -294,65 +329,75 @@
             reader.readAsDataURL(file);
         }
         
-        // 네이버 Clova OCR API 호출
-        async function callClovaOCR(imageDataUrl) {
-            const ACCESS_KEY = 'ncp_iam_BPAMKR2W2OjsLSKwByee';
-            const SECRET_KEY = 'ncp_iam_BPKMKRWMJ2QIXCHWbKkgUs0sBVISvKQSPA';
-            const CLOVA_API_URL = 'http://clovaocr-api-kr.ncloud.com/external/v1/42314/7ae4928fba21ca39ceee5a0c20a192ef6dec0d55461956f1f589685e63be1183';
-            
-            console.log('🚀 네이버 Clova OCR 요청 시작');
-            
-            const base64Image = imageDataUrl.split(',')[1];
-            const timestamp = Date.now().toString();
-            
-            const requestBody = {
-                images: [{
-                    format: 'jpeg',
-                    name: 'receipt',
-                    data: base64Image
-                }],
-                requestId: 'receipt-scanner-' + timestamp,
-                version: 'V2',
-                timestamp: parseInt(timestamp)
-            };
-            
-            const response = await fetch(CLOVA_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-OCR-SECRET': SECRET_KEY,
-                    'X-NCP-APIGW-TIMESTAMP': timestamp,
-                    'X-NCP-IAM-ACCESS-KEY': ACCESS_KEY
-                },
-                body: JSON.stringify(requestBody)
-            });
-            
-            console.log('📡 API 응답:', response.status, response.statusText);
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('❌ API 오류:', errorText);
-                throw new Error(`Clova OCR API 오류 (${response.status}): ${errorText}`);
-            }
-            
-            const data = await response.json();
-            console.log('📄 OCR 응답 데이터:', data);
-            
-            if (data.images && data.images[0] && data.images[0].fields) {
-                let fullText = '';
-                data.images[0].fields.forEach(field => {
-                    if (field.inferText) {
-                        fullText += field.inferText + '\n';
+        // 이미지 전처리 (흑백 변환, 대비 증가)
+        async function preprocessImage(imageDataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // 원본 이미지 그리기
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // 이미지 데이터 가져오기
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    
+                    // 흑백 변환 및 대비 증가
+                    for (let i = 0; i < data.length; i += 4) {
+                        // 그레이스케일 변환
+                        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                        
+                        // 대비 증가 (threshold)
+                        const threshold = gray > 128 ? 255 : 0;
+                        
+                        data[i] = threshold;     // R
+                        data[i + 1] = threshold; // G
+                        data[i + 2] = threshold; // B
                     }
-                });
-                
-                if (fullText.trim().length > 0) {
-                    console.log('✅ Clova OCR 성공!');
-                    return { text: fullText.trim() };
-                }
-            }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                    resolve(canvas.toDataURL('image/jpeg', 0.95));
+                };
+                img.src = imageDataUrl;
+            });
+        }
+        
+        // Tesseract.js OCR 처리
+        async function performOCR(imageDataUrl) {
+            console.log('🚀 Tesseract.js OCR 시작');
             
-            throw new Error('Clova OCR 응답에 텍스트가 없습니다');
+            try {
+                // 이미지 전처리
+                updateStatus('이미지 전처리 중...');
+                const processedImage = await preprocessImage(imageDataUrl);
+                
+                const result = await Tesseract.recognize(
+                    processedImage,
+                    'kor+eng', // 한국어 + 영어 인식
+                    {
+                        logger: (m) => {
+                            console.log(m);
+                            if (m.status === 'recognizing text') {
+                                const percent = Math.round(m.progress * 100);
+                                updateProgress(percent);
+                                updateStatus(`OCR 진행중... ${percent}%`);
+                            }
+                        }
+                    }
+                );
+                
+                console.log('✅ Tesseract.js OCR 완료');
+                return { text: result.data.text };
+                
+            } catch (error) {
+                console.error('❌ Tesseract OCR 오류:', error);
+                throw error;
+            }
         }
         
         // 이미지 처리
@@ -361,6 +406,7 @@
             
             document.getElementById('loading').classList.add('show');
             document.getElementById('results').classList.remove('show');
+            updateProgress(0);
             
             const loadingText = document.getElementById('loadingText');
             
@@ -371,40 +417,33 @@
             }
             
             try {
-                updateStatus('🚀 네이버 Clova OCR로 분석 시작...');
-                loadingText.textContent = '네이버 AI가 영수증을 분석 중...';
+                updateStatus('🚀 Tesseract.js OCR로 분석 시작...');
+                loadingText.textContent = 'AI가 영수증을 분석 중... (첫 실행시 시간이 걸릴 수 있습니다)';
                 
-                const result = await callClovaOCR(capturedImage);
+                const result = await performOCR(capturedImage);
                 
                 document.getElementById('recognizedText').value = result.text;
                 
                 if (result.text.length > 5) {
                     const parsed = parseReceiptText(result.text);
+                    currentResult = parsed;
                     displayResults(parsed);
-                    updateStatus(`✅ 네이버 Clova OCR 완료 - ${result.text.length}글자 인식`);
+                    updateStatus(`✅ OCR 완료 - ${result.text.length}글자 인식`);
                 } else {
                     throw new Error('인식된 텍스트가 너무 짧습니다');
                 }
                 
             } catch (error) {
                 console.error('❌ OCR 오류:', error);
-                updateStatus('❌ OCR 실패 - 시뮬레이션 결과 표시');
+                updateStatus('❌ OCR 실패 - 더 선명한 사진을 찍어주세요');
                 
-                const simResult = {
-                    date: new Date().toISOString().split('T')[0],
-                    business: '스타벅스 강남점 (OCR 실패)',
-                    amount: Math.floor(Math.random() * 30000) + 2000,
-                    category: '간식대'
-                };
-                
-                document.getElementById('recognizedText').value = 'OCR 인식 실패\n시뮬레이션 결과를 표시합니다.';
-                displayResults(simResult);
+                alert('영수증 인식에 실패했습니다. 더 선명하게 다시 촬영해주세요.');
             }
             
             document.getElementById('loading').classList.remove('show');
         }
         
-        // 텍스트 분석
+        // 텍스트 분석 (개선된 버전)
         function parseReceiptText(text) {
             const lines = text.split('\n').filter(line => line.trim().length > 0);
             
@@ -413,55 +452,101 @@
             let amount = 0;
             let category = '';
             
-            // 날짜 찾기
+            // 날짜 찾기 (더 많은 패턴 지원)
             for (const line of lines) {
-                const dateMatch = line.match(/(\d{4})[년\-\.\s\/]*(\d{1,2})[월\-\.\s\/]*(\d{1,2})[일\-\.\s]*/);
-                if (dateMatch) {
-                    date = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
-                    break;
+                // 2024-01-15, 2024/01/15, 2024.01.15, 2024년 01월 15일 등
+                const datePatterns = [
+                    /(\d{4})[년\-\.\s\/]*(\d{1,2})[월\-\.\s\/]*(\d{1,2})[일\-\.\s]*/,
+                    /(\d{2,4})[\.\/\-](\d{1,2})[\.\/\-](\d{1,2})/,
+                    /(\d{1,2})[\.\/\-](\d{1,2})[\.\/\-](\d{2,4})/
+                ];
+                
+                for (const pattern of datePatterns) {
+                    const dateMatch = line.match(pattern);
+                    if (dateMatch) {
+                        let year = dateMatch[1];
+                        let month = dateMatch[2];
+                        let day = dateMatch[3];
+                        
+                        // YY 형식을 YYYY로 변환
+                        if (year.length === 2) {
+                            year = '20' + year;
+                        }
+                        
+                        // DD/MM/YYYY 형식 처리
+                        if (parseInt(dateMatch[1]) <= 31 && parseInt(dateMatch[3]) >= 2000) {
+                            day = dateMatch[1];
+                            month = dateMatch[2];
+                            year = dateMatch[3];
+                        }
+                        
+                        date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                        break;
+                    }
                 }
+                if (date) break;
             }
             
-            // 업체명 찾기
+            // 업체명 찾기 (상단 5줄 내에서)
             for (const line of lines.slice(0, 5)) {
-                if (line.length > 2 && !line.match(/^\d+$/) && !line.includes('영수증')) {
+                // 숫자만 있거나 특수 키워드가 있는 줄은 제외
+                if (line.length > 2 && 
+                    !line.match(/^\d+$/) && 
+                    !line.includes('영수증') &&
+                    !line.includes('사업자') &&
+                    !line.includes('등록번호') &&
+                    !line.includes('대표자')) {
                     business = line.trim();
                     break;
                 }
             }
             
-            // 금액 찾기
+            // 금액 찾기 (개선된 로직)
             const amounts = [];
             for (const line of lines) {
-                const numbers = line.match(/\d{1,3}(?:,\d{3})*|\d+/g);
-                if (numbers) {
-                    numbers.forEach(num => {
-                        const parsed = parseInt(num.replace(/,/g, ''));
-                        if (parsed >= 100 && parsed <= 1000000) {
+                // 금액 패턴: 1,000원, 1000원, ₩1,000, 합계:1000 등
+                const amountPatterns = [
+                    /(?:합계|총액|계|total|금액)[\s:]*[\₩\$]?\s*(\d{1,3}(?:,\d{3})*)/i,
+                    /(\d{1,3}(?:,\d{3})*)\s*원/,
+                    /[\₩\$]\s*(\d{1,3}(?:,\d{3})*)/,
+                    /(\d{1,3}(?:,\d{3})*)\s*(?:원|KRW)/i
+                ];
+                
+                for (const pattern of amountPatterns) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        const parsed = parseInt(match[1].replace(/,/g, ''));
+                        if (parsed >= 100 && parsed <= 10000000) {
                             amounts.push(parsed);
                         }
-                    });
+                    }
                 }
             }
+            
+            // 가장 큰 금액을 선택 (보통 합계가 가장 큼)
             amount = amounts.length > 0 ? Math.max(...amounts) : 0;
             
-            // 카테고리 분류
+            // 카테고리 분류 (더 많은 키워드 추가)
             const textLower = text.toLowerCase();
-            if (textLower.includes('스타벅스') || textLower.includes('카페') || textLower.includes('커피')) {
-                category = '간식대';
-            } else if (textLower.includes('맥도날드') || textLower.includes('버거') || textLower.includes('식당')) {
-                category = '식대';
-            } else if (textLower.includes('gs25') || textLower.includes('편의점')) {
-                category = '간식대';
-            } else if (textLower.includes('주유') || textLower.includes('칼텍스')) {
-                category = '유류대';
-            } else if (textLower.includes('통행료')) {
-                category = '통행료';
-            } else if (textLower.includes('택시')) {
-                category = '택시비';
-            } else if (textLower.includes('지하철') || textLower.includes('버스')) {
-                category = '교통비';
-            } else {
+            const categories = {
+                '간식대': ['스타벅스', '카페', '커피', '베이커리', '도넛', '아이스크림', '편의점', 'gs25', 'cu', '세븐일레븐'],
+                '식대': ['맥도날드', '버거', '식당', '밥', '국수', '김밥', '치킨', '피자', '중국집', '일식', '한식'],
+                '유류대': ['주유', '칼텍스', 'sk', 'gs칼텍스', '현대오일뱅크', '에스오일'],
+                '통행료': ['통행료', '톨게이트', '하이패스'],
+                '택시비': ['택시', '카카오택시', '우버'],
+                '교통비': ['지하철', '버스', '교통카드', '티머니'],
+                '사무용품': ['문구', '다이소', '알파', '핫트랙스'],
+                '도서': ['교보문고', '영풍문고', '알라딘', '서점']
+            };
+            
+            for (const [cat, keywords] of Object.entries(categories)) {
+                if (keywords.some(keyword => textLower.includes(keyword))) {
+                    category = cat;
+                    break;
+                }
+            }
+            
+            if (!category) {
                 category = '기타';
             }
             
@@ -481,6 +566,73 @@
             document.getElementById('resultCategory').textContent = result.category;
             
             document.getElementById('results').classList.add('show');
+            
+            // 전체 목록에 추가
+            allResults.push(result);
+            updateStatus(`✅ ${allResults.length}개의 영수증이 저장되었습니다`);
+        }
+        
+        // 엑셀로 내보내기 (단일 항목)
+        function exportToExcel() {
+            if (!currentResult) {
+                alert('내보낼 데이터가 없습니다.');
+                return;
+            }
+            
+            exportData([currentResult], `영수증_${currentResult.date}_${currentResult.business}.csv`);
+        }
+        
+        // 엑셀로 내보내기 (전체 목록)
+        function exportAllToExcel() {
+            if (allResults.length === 0) {
+                alert('저장된 영수증이 없습니다.');
+                return;
+            }
+            
+            const today = new Date().toISOString().split('T')[0];
+            exportData(allResults, `영수증_전체_${today}.csv`);
+        }
+        
+        // 데이터를 CSV로 내보내기
+        function exportData(dataArray, filename) {
+            // CSV 형식으로 변환
+            const headers = ['날짜', '업체명', '금액', '적요'];
+            let csv = headers.join(',') + '\n';
+            
+            dataArray.forEach(data => {
+                const row = [
+                    data.date,
+                    `"${data.business}"`, // 쉼표가 있을 수 있으므로 따옴표로 감싸기
+                    data.amount,
+                    data.category
+                ];
+                csv += row.join(',') + '\n';
+            });
+            
+            // BOM 추가 (한글 깨짐 방지)
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+            
+            // 다운로드
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            updateStatus(`✅ ${filename} 파일로 저장되었습니다.`);
+        }
+        
+        // 추가 스캔
+        function addMore() {
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('recognizedText').value = '';
+            capturedImage = null;
+            currentResult = null;
+            updateStatus(`📸 새 영수증을 촬영하세요 (현재 ${allResults.length}개 저장됨)`);
         }
         
         // 이벤트 리스너 등록
@@ -491,6 +643,9 @@
             const captureBtn = document.getElementById('captureBtn');
             const uploadBtn = document.getElementById('uploadBtn');
             const fileInput = document.getElementById('fileInput');
+            const exportBtn = document.getElementById('exportBtn');
+            const exportAllBtn = document.getElementById('exportAllBtn');
+            const addMoreBtn = document.getElementById('addMoreBtn');
             
             // 카메라 시작 버튼
             if (startBtn) {
@@ -527,6 +682,33 @@
                 console.log('✅ 파일 입력 이벤트 등록됨');
             }
             
+            // 엑셀 내보내기 버튼
+            if (exportBtn) {
+                exportBtn.onclick = function() {
+                    console.log('👆 엑셀 내보내기 버튼 클릭됨');
+                    exportToExcel();
+                };
+                console.log('✅ 엑셀 내보내기 버튼 이벤트 등록됨');
+            }
+            
+            // 전체 내보내기 버튼
+            if (exportAllBtn) {
+                exportAllBtn.onclick = function() {
+                    console.log('👆 전체 내보내기 버튼 클릭됨');
+                    exportAllToExcel();
+                };
+                console.log('✅ 전체 내보내기 버튼 이벤트 등록됨');
+            }
+            
+            // 추가 스캔 버튼
+            if (addMoreBtn) {
+                addMoreBtn.onclick = function() {
+                    console.log('👆 추가 스캔 버튼 클릭됨');
+                    addMore();
+                };
+                console.log('✅ 추가 스캔 버튼 이벤트 등록됨');
+            }
+            
             updateStatus('🎉 모든 이벤트 리스너 등록 완료');
         }
         
@@ -537,8 +719,11 @@
             
             setupEvents();
             
+            // Tesseract 초기화
+            updateStatus('OCR 엔진 초기화 중...');
+            
             setTimeout(() => {
-                updateStatus('🚀 네이버 Clova OCR 준비 완료! 버튼을 눌러보세요');
+                updateStatus('🚀 준비 완료! 영수증을 촬영하거나 업로드하세요');
             }, 1000);
         };
         
