@@ -12,6 +12,47 @@
             padding: 20px;
             background: #f0f0f0;
         }
+        
+        // 카메라 전환 (전면 ↔ 후면)
+        function switchCamera() {
+            updateStatus('카메라 전환 중...');
+            
+            // 현재 스트림 중지
+            if (stream) {
+                stream.getTracks().forEach(function(track) {
+                    track.stop();
+                });
+            }
+            
+            // 카메라 모드 전환
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            var cameraName = currentFacingMode === 'environment' ? '후면' : '전면';
+            
+            var constraints = {
+                video: {
+                    facingMode: { exact: currentFacingMode },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(function(mediaStream) {
+                    stream = mediaStream;
+                    var video = document.getElementById('camera');
+                    video.srcObject = stream;
+                    video.play();
+                    updateStatus(cameraName + ' 카메라로 전환됨');
+                })
+                .catch(function(error) {
+                    console.error('카메라 전환 오류:', error);
+                    updateStatus('카메라 전환 실패: ' + error.message);
+                    
+                    // 원래 모드로 되돌리기
+                    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+                    startCamera();
+                });
+        }
         .container {
             background: white;
             padding: 30px;
@@ -109,6 +150,7 @@
         <div class="controls">
             <button id="startBtn">📷 카메라 시작</button>
             <button id="captureBtn" disabled>📸 사진 촬영</button>
+            <button id="switchBtn" disabled>🔄 카메라 전환</button>
             <button id="uploadBtn" class="upload-btn">📁 사진 업로드</button>
             <input type="file" id="fileInput" accept="image/*">
         </div>
@@ -142,6 +184,7 @@
         // 전역 변수
         var stream = null;
         var imageData = null;
+        var currentFacingMode = 'environment'; // 현재 카메라 모드
         
         // 상태 업데이트 함수
         function updateStatus(message) {
@@ -156,6 +199,7 @@
             // 버튼 이벤트 등록
             document.getElementById('startBtn').onclick = startCamera;
             document.getElementById('captureBtn').onclick = capturePhoto;
+            document.getElementById('switchBtn').onclick = switchCamera;
             document.getElementById('uploadBtn').onclick = function() {
                 document.getElementById('fileInput').click();
             };
@@ -173,7 +217,16 @@
                 return;
             }
             
-            navigator.mediaDevices.getUserMedia({ video: true })
+            // 후면 카메라 우선 시도
+            var constraints = {
+                video: {
+                    facingMode: { exact: 'environment' }, // 후면 카메라 강제
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            
+            navigator.mediaDevices.getUserMedia(constraints)
                 .then(function(mediaStream) {
                     stream = mediaStream;
                     var video = document.getElementById('camera');
@@ -181,13 +234,40 @@
                     video.play();
                     
                     document.getElementById('captureBtn').disabled = false;
+                    document.getElementById('switchBtn').disabled = false;
                     document.getElementById('startBtn').textContent = '🔄 카메라 재시작';
-                    updateStatus('카메라 시작 성공');
+                    updateStatus('후면 카메라 시작 성공');
                 })
                 .catch(function(error) {
-                    console.error('카메라 오류:', error);
-                    updateStatus('카메라 오류: ' + error.message);
-                    alert('카메라를 시작할 수 없습니다. 권한을 확인해주세요.');
+                    console.error('후면 카메라 오류:', error);
+                    updateStatus('후면 카메라 실패, 전면 카메라 시도 중...');
+                    
+                    // 후면 카메라 실패 시 전면 카메라로 대체
+                    var fallbackConstraints = {
+                        video: {
+                            facingMode: 'user', // 전면 카메라
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    navigator.mediaDevices.getUserMedia(fallbackConstraints)
+                        .then(function(mediaStream) {
+                            stream = mediaStream;
+                            var video = document.getElementById('camera');
+                            video.srcObject = stream;
+                            video.play();
+                            
+                            document.getElementById('captureBtn').disabled = false;
+                            document.getElementById('switchBtn').disabled = false;
+                            document.getElementById('startBtn').textContent = '🔄 카메라 재시작';
+                            updateStatus('전면 카메라로 시작됨 (후면 카메라 없음)');
+                        })
+                        .catch(function(error2) {
+                            console.error('모든 카메라 오류:', error2);
+                            updateStatus('카메라 오류: ' + error2.message);
+                            alert('카메라를 시작할 수 없습니다. 권한을 확인해주세요.');
+                        });
                 });
         }
         
