@@ -174,9 +174,8 @@
         </div>
         
         <div class="controls">
-            <button id="startBtn">📷 카메라 시작</button>
+            <button id="startBtn">📷 후면 카메라 시작</button>
             <button id="captureBtn" disabled>📸 사진 촬영</button>
-            <button id="switchBtn" disabled>🔄 카메라 전환</button>
             <button id="uploadBtn" class="upload-btn">📁 사진 업로드</button>
             <input type="file" id="fileInput" accept="image/*">
         </div>
@@ -228,7 +227,6 @@
             // 버튼 이벤트 등록
             document.getElementById('startBtn').onclick = startCamera;
             document.getElementById('captureBtn').onclick = capturePhoto;
-            document.getElementById('switchBtn').onclick = switchCamera;
             document.getElementById('uploadBtn').onclick = function() {
                 document.getElementById('fileInput').click();
             };
@@ -265,19 +263,19 @@
                 });
         }
         
-        // 카메라 시작
+        // 카메라 시작 (후면 카메라만)
         function startCamera() {
-            updateStatus('카메라 시작 시도 중...');
+            updateStatus('후면 카메라 시작 시도 중...');
             
             if (!navigator.mediaDevices) {
                 alert('카메라가 지원되지 않습니다');
                 return;
             }
             
-            // 후면 카메라 우선 시도
+            // 후면 카메라만 시도
             var constraints = {
                 video: {
-                    facingMode: { exact: 'environment' }, // 후면 카메라 강제
+                    facingMode: 'environment', // 후면 카메라
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
@@ -291,24 +289,15 @@
                     video.play();
                     
                     document.getElementById('captureBtn').disabled = false;
-                    document.getElementById('switchBtn').disabled = false;
                     document.getElementById('startBtn').textContent = '🔄 카메라 재시작';
-                    updateStatus('후면 카메라 시작 성공');
+                    updateStatus('후면 카메라 시작 성공! 영수증을 찍어보세요');
                 })
                 .catch(function(error) {
                     console.error('후면 카메라 오류:', error);
-                    updateStatus('후면 카메라 실패, 전면 카메라 시도 중...');
+                    updateStatus('후면 카메라 실패, 기본 카메라로 시도...');
                     
-                    // 후면 카메라 실패 시 전면 카메라로 대체
-                    var fallbackConstraints = {
-                        video: {
-                            facingMode: 'user', // 전면 카메라
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        }
-                    };
-                    
-                    navigator.mediaDevices.getUserMedia(fallbackConstraints)
+                    // 후면 카메라 실패 시 그냥 기본 카메라
+                    navigator.mediaDevices.getUserMedia({ video: true })
                         .then(function(mediaStream) {
                             stream = mediaStream;
                             var video = document.getElementById('camera');
@@ -316,9 +305,8 @@
                             video.play();
                             
                             document.getElementById('captureBtn').disabled = false;
-                            document.getElementById('switchBtn').disabled = false;
                             document.getElementById('startBtn').textContent = '🔄 카메라 재시작';
-                            updateStatus('전면 카메라로 시작됨 (후면 카메라 없음)');
+                            updateStatus('기본 카메라로 시작됨');
                         })
                         .catch(function(error2) {
                             console.error('모든 카메라 오류:', error2);
