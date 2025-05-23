@@ -1,506 +1,262 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>영수증 스캐너</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
         body {
             font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            max-width: 600px;
+            margin: 0 auto;
             padding: 20px;
+            background: #f0f0f0;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
             padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
             text-align: center;
-        }
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        .main-content {
-            padding: 40px;
+            color: #333;
+            margin-bottom: 30px;
         }
         .camera-section {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 30px;
         }
-        .camera-container {
-            position: relative;
-            max-width: 400px;
-            margin: 0 auto 20px;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        #camera {
+        video {
             width: 100%;
+            max-width: 400px;
             height: 300px;
-            object-fit: cover;
-            background: #f0f0f0;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: #f9f9f9;
         }
         .controls {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
+            margin: 20px 0;
+            text-align: center;
         }
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 50px;
-            font-size: 1.1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        button {
+            background: #007bff;
             color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 5px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
         }
-        .btn-secondary {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-            color: #333;
+        button:hover {
+            background: #0056b3;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        .btn:disabled {
-            opacity: 0.6;
+        button:disabled {
+            background: #ccc;
             cursor: not-allowed;
         }
-        .results-section {
-            margin-top: 40px;
-            padding: 30px;
-            background: #f8f9fa;
-            border-radius: 15px;
+        .upload-btn {
+            background: #28a745;
+        }
+        .upload-btn:hover {
+            background: #1e7e34;
+        }
+        input[type="file"] {
             display: none;
         }
-        .results-section.show {
+        .results {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+        .results.show {
             display: block;
         }
         .result-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        .result-item:last-child {
-            border-bottom: none;
-        }
-        .result-label {
-            font-weight: 600;
-            color: #495057;
-        }
-        .result-value {
-            font-size: 1.1em;
-            color: #212529;
-            font-weight: 500;
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
         }
         .loading {
-            display: none;
             text-align: center;
             padding: 20px;
+            display: none;
         }
         .loading.show {
             display: block;
         }
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #4facfe;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
         .debug {
-            margin-top: 20px;
+            background: #e9ecef;
             padding: 15px;
-            background: #e8f4f8;
-            border-radius: 10px;
-            font-size: 0.9em;
-        }
-        @media (max-width: 600px) {
-            .header h1 {
-                font-size: 2em;
-            }
-            .main-content {
-                padding: 20px;
-            }
-            .controls {
-                flex-direction: column;
-                align-items: center;
-            }
-            .btn {
-                width: 100%;
-                max-width: 300px;
-            }
-            #camera {
-                height: 250px;
-            }
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>📱 영수증 스캐너</h1>
-            <p>사진을 찍으면 지출결의서가 자동으로 작성됩니다</p>
+        <h1>📱 영수증 스캐너</h1>
+        
+        <div class="camera-section">
+            <video id="camera" autoplay playsinline></video>
         </div>
         
-        <div class="main-content">
-            <div class="camera-section">
-                <div class="camera-container">
-                    <video id="camera" autoplay playsinline></video>
-                </div>
-                <div class="controls">
-                    <button id="startCamera" class="btn btn-primary">📷 카메라 시작</button>
-                    <button id="capturePhoto" class="btn btn-secondary" disabled>📸 사진 촬영</button>
-                    <input type="file" id="fileInput" accept="image/*" style="display: none;">
-                    <button id="uploadPhoto" class="btn btn-secondary">📁 사진 업로드</button>
-                </div>
+        <div class="controls">
+            <button id="startBtn">📷 카메라 시작</button>
+            <button id="captureBtn" disabled>📸 사진 촬영</button>
+            <button id="uploadBtn" class="upload-btn">📁 사진 업로드</button>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div id="loading" class="loading">
+            <p>처리 중...</p>
+        </div>
+        
+        <div id="results" class="results">
+            <h3>분석 결과</h3>
+            <div class="result-item">
+                <strong>날짜:</strong> <span id="resultDate">-</span>
             </div>
-            
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>영수증을 분석 중입니다...</p>
+            <div class="result-item">
+                <strong>업체명:</strong> <span id="resultBusiness">-</span>
             </div>
-            
-            <div class="results-section" id="results">
-                <h2>🔍 분석 결과</h2>
-                <div class="result-item">
-                    <span class="result-label">날짜:</span>
-                    <span class="result-value" id="date">-</span>
-                </div>
-                <div class="result-item">
-                    <span class="result-label">업체명:</span>
-                    <span class="result-value" id="business">-</span>
-                </div>
-                <div class="result-item">
-                    <span class="result-label">금액:</span>
-                    <span class="result-value" id="amount">-</span>
-                </div>
-                <div class="result-item">
-                    <span class="result-label">적요:</span>
-                    <span class="result-value" id="category">-</span>
-                </div>
+            <div class="result-item">
+                <strong>금액:</strong> <span id="resultAmount">-</span>
             </div>
-            
-            <div class="debug">
-                <h4>🔍 상태 확인</h4>
-                <div id="debugInfo">페이지 로딩 중...</div>
+            <div class="result-item">
+                <strong>적요:</strong> <span id="resultCategory">-</span>
             </div>
+        </div>
+        
+        <div class="debug">
+            <strong>상태:</strong> <span id="status">페이지 로드됨</span>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script>
-        console.log('스크립트 시작');
+        // 전역 변수
+        var stream = null;
+        var imageData = null;
         
-        let stream;
-        let capturedImageData;
-        
-        const categoryMapping = {
-            '식당': '식대',
-            '카페': '간식대', 
-            '커피': '간식대',
-            '편의점': '간식대',
-            '주유소': '유류대',
-            'GS칼텍스': '유류대',
-            'SK에너지': '유류대',
-            '한국도로공사': '통행료',
-            '택시': '택시비',
-            '우편': '우편료',
-            '지하철': '교통비',
-            'KTX': 'KTX 요금'
-        };
-        
-        // DOM 로드 완료 후 이벤트 리스너 등록
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM 로드 완료');
-            
-            // 버튼 요소들 가져오기
-            const startCameraBtn = document.getElementById('startCamera');
-            const capturePhotoBtn = document.getElementById('capturePhoto');
-            const uploadPhotoBtn = document.getElementById('uploadPhoto');
-            const fileInput = document.getElementById('fileInput');
-            
-            console.log('버튼 요소들:', {
-                startCamera: startCameraBtn,
-                capturePhoto: capturePhotoBtn,
-                uploadPhoto: uploadPhotoBtn,
-                fileInput: fileInput
-            });
-            
-            // 이벤트 리스너 등록
-            if (startCameraBtn) {
-                startCameraBtn.onclick = function() {
-                    console.log('카메라 시작 클릭됨');
-                    startCamera();
-                };
-            }
-            
-            if (capturePhotoBtn) {
-                capturePhotoBtn.onclick = function() {
-                    console.log('사진 촬영 클릭됨');
-                    capturePhoto();
-                };
-            }
-            
-            if (uploadPhotoBtn) {
-                uploadPhotoBtn.onclick = function() {
-                    console.log('사진 업로드 클릭됨');
-                    fileInput.click();
-                };
-            }
-            
-            if (fileInput) {
-                fileInput.onchange = function(event) {
-                    console.log('파일 선택됨');
-                    handleFileUpload(event);
-                };
-            }
-            
-            // 디버그 정보 업데이트
-            updateDebugInfo();
-        });
-        
-        function updateDebugInfo() {
-            let info = '';
-            info += location.protocol === 'https:' ? '✅ HTTPS 연결<br>' : '❌ HTTP 연결<br>';
-            info += (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? '✅ 카메라 API 지원<br>' : '❌ 카메라 API 미지원<br>';
-            info += (window.File && window.FileReader) ? '✅ 파일 API 지원<br>' : '❌ 파일 API 미지원<br>';
-            info += typeof Tesseract !== 'undefined' ? '✅ OCR 라이브러리 로드됨' : '❌ OCR 라이브러리 로드 실패';
-            
-            document.getElementById('debugInfo').innerHTML = info;
+        // 상태 업데이트 함수
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            console.log(message);
         }
         
-        async function startCamera() {
-            console.log('카메라 시작 함수 실행');
+        // 페이지 로드 시 실행
+        window.onload = function() {
+            updateStatus('JavaScript 로드 완료');
             
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert('이 브라우저는 카메라를 지원하지 않습니다.');
+            // 버튼 이벤트 등록
+            document.getElementById('startBtn').onclick = startCamera;
+            document.getElementById('captureBtn').onclick = capturePhoto;
+            document.getElementById('uploadBtn').onclick = function() {
+                document.getElementById('fileInput').click();
+            };
+            document.getElementById('fileInput').onchange = handleFile;
+            
+            updateStatus('이벤트 리스너 등록 완료');
+        };
+        
+        // 카메라 시작
+        function startCamera() {
+            updateStatus('카메라 시작 시도 중...');
+            
+            if (!navigator.mediaDevices) {
+                alert('카메라가 지원되지 않습니다');
                 return;
             }
             
-            try {
-                const constraints = {
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                };
-                
-                stream = await navigator.mediaDevices.getUserMedia(constraints);
-                const video = document.getElementById('camera');
-                video.srcObject = stream;
-                
-                video.onloadedmetadata = function() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(mediaStream) {
+                    stream = mediaStream;
+                    var video = document.getElementById('camera');
+                    video.srcObject = stream;
                     video.play();
-                    document.getElementById('capturePhoto').disabled = false;
-                    document.getElementById('startCamera').textContent = '🔄 카메라 재시작';
-                };
-                
-            } catch (err) {
-                console.error('카메라 오류:', err);
-                
-                if (err.name === 'NotAllowedError') {
-                    alert('카메라 권한이 거부되었습니다.\n브라우저 설정에서 카메라를 허용해주세요.');
-                } else {
-                    try {
-                        const fallbackConstraints = { video: { facingMode: 'user' } };
-                        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-                        const video = document.getElementById('camera');
-                        video.srcObject = stream;
-                        video.play();
-                        document.getElementById('capturePhoto').disabled = false;
-                    } catch (err2) {
-                        alert('카메라를 시작할 수 없습니다: ' + err2.message);
-                    }
-                }
-            }
+                    
+                    document.getElementById('captureBtn').disabled = false;
+                    document.getElementById('startBtn').textContent = '🔄 카메라 재시작';
+                    updateStatus('카메라 시작 성공');
+                })
+                .catch(function(error) {
+                    console.error('카메라 오류:', error);
+                    updateStatus('카메라 오류: ' + error.message);
+                    alert('카메라를 시작할 수 없습니다. 권한을 확인해주세요.');
+                });
         }
         
+        // 사진 촬영
         function capturePhoto() {
-            console.log('사진 촬영 함수 실행');
-            const video = document.getElementById('camera');
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+            updateStatus('사진 촬영 중...');
+            
+            var video = document.getElementById('camera');
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
             
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
             
-            capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
-            processImage(capturedImageData);
+            imageData = canvas.toDataURL('image/jpeg');
+            processImage();
         }
         
-        function handleFileUpload(event) {
-            console.log('파일 업로드 함수 실행');
-            const file = event.target.files[0];
+        // 파일 업로드
+        function handleFile(event) {
+            updateStatus('파일 업로드 중...');
             
-            if (file && file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    capturedImageData = e.target.result;
-                    processImage(capturedImageData);
-                };
-                reader.readAsDataURL(file);
-            } else {
-                alert('이미지 파일만 업로드 가능합니다.');
-            }
-        }
-        
-        async function processImage(imageData) {
-            console.log('이미지 처리 시작');
-            showLoading(true);
+            var file = event.target.files[0];
+            if (!file) return;
             
-            try {
-                console.log('OCR 시작...');
-                const { data: { text } } = await Tesseract.recognize(
-                    imageData,
-                    'kor+eng',
-                    {
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                const progress = Math.round(m.progress * 100);
-                                document.querySelector('.loading p').textContent = `분석 중... ${progress}%`;
-                            }
-                        }
-                    }
-                );
-                
-                console.log('인식된 텍스트:', text);
-                const result = parseReceiptText(text);
-                displayResults(result);
-                
-            } catch (error) {
-                console.error('OCR 오류:', error);
-                alert('텍스트 인식 실패. 시뮬레이션 결과를 표시합니다.');
-                const result = simulateOCR();
-                displayResults(result);
+            if (!file.type.startsWith('image/')) {
+                alert('이미지 파일만 업로드 가능합니다');
+                return;
             }
             
-            showLoading(false);
-        }
-        
-        function parseReceiptText(text) {
-            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-            
-            let date = '';
-            let business = '';
-            let amount = 0;
-            let category = '';
-            
-            // 날짜 추출
-            for (const line of lines) {
-                const dateMatch = line.match(/(\d{4})[.-/](\d{1,2})[.-/](\d{1,2})/);
-                if (dateMatch) {
-                    date = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
-                    break;
-                }
-            }
-            
-            // 업체명 추출
-            for (let i = 0; i < Math.min(3, lines.length); i++) {
-                const line = lines[i];
-                if (line.length > 2 && !line.match(/^\d+$/) && !line.match(/\d{4}[.-/]\d{1,2}[.-/]\d{1,2}/)) {
-                    business = line;
-                    break;
-                }
-            }
-            
-            // 금액 추출
-            const amounts = [];
-            for (const line of lines) {
-                const numberMatches = line.match(/[\d,]+/g);
-                if (numberMatches) {
-                    numberMatches.forEach(match => {
-                        const num = parseInt(match.replace(/,/g, ''));
-                        if (num >= 100 && num <= 1000000) {
-                            amounts.push(num);
-                        }
-                    });
-                }
-            }
-            if (amounts.length > 0) {
-                amount = Math.max(...amounts);
-            }
-            
-            // 적요 분류
-            const fullText = text.toLowerCase();
-            for (const keyword in categoryMapping) {
-                if (business.toLowerCase().includes(keyword.toLowerCase()) || 
-                    fullText.includes(keyword.toLowerCase())) {
-                    category = categoryMapping[keyword];
-                    break;
-                }
-            }
-            
-            return {
-                date: date || new Date().toISOString().split('T')[0],
-                business: business || '인식 실패',
-                amount: amount || 0,
-                category: category || '기타'
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                imageData = e.target.result;
+                processImage();
             };
+            reader.readAsDataURL(file);
         }
         
-        function simulateOCR() {
-            const businesses = ['스타벅스', '맥도날드', 'GS25'];
-            const business = businesses[Math.floor(Math.random() * businesses.length)];
-            const amount = Math.floor(Math.random() * 30000) + 2000;
-            const date = new Date().toISOString().split('T')[0];
+        // 이미지 처리 (시뮬레이션)
+        function processImage() {
+            updateStatus('이미지 분석 중...');
             
-            return {
-                date: date,
-                business: business + ' (시뮬레이션)',
-                amount: amount,
-                category: '간식대'
-            };
-        }
-        
-        function displayResults(result) {
-            document.getElementById('date').textContent = result.date || '-';
-            document.getElementById('business').textContent = result.business || '-';
-            document.getElementById('amount').textContent = result.amount ? result.amount.toLocaleString() + '원' : '-';
-            document.getElementById('category').textContent = result.category || '기타';
+            // 로딩 표시
+            document.getElementById('loading').className = 'loading show';
+            document.getElementById('results').className = 'results';
             
-            document.getElementById('results').classList.add('show');
-        }
-        
-        function showLoading(show) {
-            const loading = document.getElementById('loading');
-            if (show) {
-                loading.classList.add('show');
-                document.getElementById('results').classList.remove('show');
-            } else {
-                loading.classList.remove('show');
-            }
+            // 2초 후 결과 표시 (시뮬레이션)
+            setTimeout(function() {
+                var businesses = ['스타벅스', '맥도날드', 'GS25', '이마트', '롯데리아'];
+                var categories = ['간식대', '식대', '생필품', '교통비'];
+                
+                var business = businesses[Math.floor(Math.random() * businesses.length)];
+                var amount = Math.floor(Math.random() * 50000) + 1000;
+                var category = categories[Math.floor(Math.random() * categories.length)];
+                var today = new Date().toISOString().split('T')[0];
+                
+                // 결과 표시
+                document.getElementById('resultDate').textContent = today;
+                document.getElementById('resultBusiness').textContent = business;
+                document.getElementById('resultAmount').textContent = amount.toLocaleString() + '원';
+                document.getElementById('resultCategory').textContent = category;
+                
+                // 로딩 숨기고 결과 표시
+                document.getElementById('loading').className = 'loading';
+                document.getElementById('results').className = 'results show';
+                
+                updateStatus('분석 완료');
+            }, 2000);
         }
     </script>
 </body>
