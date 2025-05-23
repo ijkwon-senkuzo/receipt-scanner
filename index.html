@@ -191,6 +191,13 @@
             
             <div class="results" id="results">
                 <h3 style="margin-bottom: 20px; color: #333;">🔍 분석 결과</h3>
+                
+                <!-- 인식된 텍스트 표시 영역 추가 -->
+                <div class="result-item" style="background: #f0f8ff; flex-direction: column; align-items: stretch;">
+                    <span class="result-label">📝 인식된 텍스트</span>
+                    <textarea id="recognizedText" readonly style="width: 100%; height: 120px; margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 12px; font-family: monospace; resize: vertical;"></textarea>
+                </div>
+                
                 <div class="result-item">
                     <span class="result-label">📅 날짜</span>
                     <span class="result-value" id="resultDate">-</span>
@@ -365,6 +372,9 @@
                     const recognizedText = result.data.text.trim();
                     console.log('=== OCR 인식 결과 ===');
                     console.log(recognizedText);
+                    
+                    // 인식된 텍스트를 화면에 표시
+                    document.getElementById('recognizedText').value = recognizedText;
                     
                     if (recognizedText.length > 10) { // 최소 10글자 이상 인식되었을 때만
                         const parsed = parseReceiptText(recognizedText);
