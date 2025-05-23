@@ -244,7 +244,38 @@
                 // 기존 스트림 정리
                 if (stream) {
                     stream.getTracks().forEach(track => track.stop());
+                    try {
+                        loadingText.textContent = 'Tesseract.js 백업 OCR 시도 중...';
+                        
+                        const tesseractResult = await Tesseract.recognize(capturedImage, 'kor+eng', {
+                            logger: function(m) {
+                                if (m.status === 'recognizing text') {
+                                    const progress = Math.round(m.progress * 100);
+                                    loadingText.textContent = `백업 OCR 진행... ${progress}%`;
+                                }
+                            }
+                        });
+                        
+                        const recognizedText = tesseractResult.data.text.trim();
+                        document.getElementById('recognizedText').value = recognizedText;
+                        
+                        if (recognizedText.length > 5) {
+                            const parsed = parseReceiptText(recognizedText);
+                            displayResults(parsed);
+                            updateStatus(`Tesseract OCR 완료 - ${recognizedText.length}글자 인식`);
+                        } else {
+                            throw new Error('백업 OCR도 실패');
+                        }
+                        
+                    } catch (tesseractError) {
+                        console.error('Tesseract.js도 실패:', tesseractError);
+                        updateStatus('모든 OCR 실패 - 지능형 시뮬레이션 사용');
+                        
+                        const simResult = getIntelligentSimulation();
+                        displayResults(simResult);
+                    }
                 }
+            }
                 
                 // 후면 카메라 설정
                 const constraints = {
@@ -352,13 +383,13 @@
                 return;
             }
             
-            // Tesseract.js 대신 Google Vision API 사용
+            // 네이버 Clova OCR 우선 시도
             try {
-                updateStatus('Google Vision API로 OCR 시작...');
-                loadingText.textContent = 'Google AI가 텍스트를 분석 중...';
+                updateStatus('네이버 Clova OCR로 분석 시작...');
+                loadingText.textContent = '네이버 AI가 영수증을 분석 중...';
                 
-                // Google Vision API 호출
-                const result = await callGoogleVisionAPI(capturedImage);
+                // 네이버 Clova OCR 호출
+                const result = await callClovaOCR(capturedImage);
                 
                 // 인식된 텍스트를 화면에 표시
                 document.getElementById('recognizedText').value = result.text;
@@ -366,50 +397,156 @@
                 if (result.text.length > 10) {
                     const parsed = parseReceiptText(result.text);
                     displayResults(parsed);
-                    updateStatus(`Google OCR 완료 - ${result.text.length}글자 인식`);
+                    updateStatus(`네이버 Clova OCR 완료 - ${result.text.length}글자 인식`);
                 } else {
                     throw new Error('인식된 텍스트가 너무 짧습니다');
                 }
                 
-            } catch (error) {
-                console.error('Google Vision API 오류:', error);
-                updateStatus('Google API 실패, Tesseract.js로 재시도...');
+            } catch (clovaError) {
+                console.error('네이버 Clova OCR 오류:', clovaError);
+                updateStatus('Clova OCR 실패, Google API로 재시도...');
                 
-                // Google API 실패 시 Tesseract.js로 백업
+                // Clova 실패 시 Google Vision API로 백업
                 try {
-                    loadingText.textContent = 'Tesseract.js OCR 시도 중...';
+                    loadingText.textContent = 'Google AI로 재분석 중...';
+                    const result = await callGoogleVisionAPI(capturedImage);
                     
-                    const tesseractResult = await Tesseract.recognize(capturedImage, 'kor+eng', {
-                        logger: function(m) {
-                            if (m.status === 'recognizing text') {
-                                const progress = Math.round(m.progress * 100);
-                                loadingText.textContent = `백업 OCR 진행... ${progress}%`;
-                            }
-                        }
-                    });
+                    document.getElementById('recognizedText').value = result.text;
                     
-                    const recognizedText = tesseractResult.data.text.trim();
-                    document.getElementById('recognizedText').value = recognizedText;
-                    
-                    if (recognizedText.length > 5) {
-                        const parsed = parseReceiptText(recognizedText);
+                    if (result.text.length > 10) {
+                        const parsed = parseReceiptText(result.text);
                         displayResults(parsed);
-                        updateStatus(`Tesseract OCR 완료 - ${recognizedText.length}글자 인식`);
+                        updateStatus(`Google OCR 완료 - ${result.text.length}글자 인식`);
                     } else {
-                        throw new Error('백업 OCR도 실패');
+                        throw new Error('Google OCR도 텍스트 부족');
                     }
                     
-                } catch (tesseractError) {
-                    console.error('Tesseract.js도 실패:', tesseractError);
-                    updateStatus('모든 OCR 실패 - 지능형 시뮬레이션 사용');
+                } catch (googleError) {
+                    console.error('Google API도 실패:', googleError);
+                    updateStatus('모든 클라우드 OCR 실패, Tesseract.js로 재시도...');
                     
-                    const simResult = getIntelligentSimulation();
-                    displayResults(simResult);
+                    // 최종 백업: Tesseract.js
                 }
             }
             
             // 로딩 숨기기
             document.getElementById('loading').classList.remove('show');
+        }
+        
+        // 네이버 Clova OCR API 호출
+        async function callClovaOCR(imageDataUrl) {
+            // 네이버 Clova OCR API 설정 (완전한 정보)
+            const ACCESS_KEY = 'ncp_iam_BPAMKR2W2OjsLSKwByee';
+            const SECRET_KEY = 'ncp_iam_BPKMKRWMJ2QIXCHWbKkgUs0sBVISvKQSPA';
+            const CLOVA_API_URL = 'http://clovaocr-api-kr.ncloud.com/external/v1/42314/7ae4928fba21ca39ceee5a0c20a192ef6dec0d55461956f1f589685e63be1183';
+            
+            console.log('네이버 Clova OCR 요청 준비 중...');
+            console.log('API URL:', CLOVA_API_URL);
+            
+            // base64 이미지 데이터에서 헤더 제거
+            const base64Image = imageDataUrl.split(',')[1];
+            
+            // 타임스탬프 생성
+            const timestamp = Date.now().toString();
+            
+            const requestBody = {
+                images: [{
+                    format: 'jpeg',
+                    name: 'receipt',
+                    data: base64Image
+                }],
+                requestId: 'receipt-scanner-' + timestamp,
+                version: 'V2',
+                timestamp: parseInt(timestamp)
+            };
+            
+            try {
+                console.log('🔥 네이버 Clova OCR API 호출 시작! 🔥');
+                console.log('요청 정보:', {
+                    url: CLOVA_API_URL,
+                    requestId: requestBody.requestId,
+                    imageFormat: requestBody.images[0].format,
+                    timestamp: timestamp
+                });
+                
+                const response = await fetch(CLOVA_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-OCR-SECRET': SECRET_KEY,
+                        'X-NCP-APIGW-TIMESTAMP': timestamp,
+                        'X-NCP-IAM-ACCESS-KEY': ACCESS_KEY
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                console.log('📡 API 응답 수신:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Clova OCR API 오류:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorText
+                    });
+                    throw new Error(`Clova OCR API 오류 (${response.status}): ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('📄 네이버 Clova OCR 전체 응답:', data);
+                
+                // 응답에서 텍스트 추출
+                if (data.images && data.images[0] && data.images[0].fields) {
+                    let fullText = '';
+                    const fields = data.images[0].fields;
+                    
+                    console.log(`✨ 총 ${fields.length}개 필드 인식됨!`);
+                    
+                    fields.forEach((field, index) => {
+                        if (field.inferText) {
+                            const confidence = field.inferConfidence ? Math.round(field.inferConfidence * 100) : 'N/A';
+                            console.log(`📝 필드 ${index + 1}: "${field.inferText}" (신뢰도: ${confidence}%)`);
+                            fullText += field.inferText + '\n';
+                        }
+                    });
+                    
+                    if (fullText.trim().length > 0) {
+                        console.log('🎉 === 네이버 Clova OCR 성공! ===');
+                        console.log('📋 최종 인식 텍스트:');
+                        console.log(fullText);
+                        console.log(`📊 총 글자 수: ${fullText.trim().length}글자`);
+                        return { text: fullText.trim() };
+                    } else {
+                        throw new Error('Clova OCR 응답에 인식된 텍스트가 없습니다');
+                    }
+                } else if (data.images && data.images[0] && data.images[0].convertedImageInfo) {
+                    // 다른 응답 구조일 경우
+                    console.log('🔄 다른 응답 구조 감지, 대안 파싱 시도...');
+                    throw new Error('예상과 다른 응답 구조입니다');
+                } else {
+                    console.error('❌ 예상과 다른 응답 구조:', data);
+                    throw new Error('Clova OCR 응답에서 이미지 결과를 찾을 수 없습니다');
+                }
+                
+            } catch (error) {
+                console.error('💥 Clova OCR 호출 중 오류:', error);
+                throw error;
+            }
+        }
+        
+        // HMAC-SHA256 서명 생성 (간단한 구현)
+        async function createSignature(message, secret) {
+            const encoder = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(secret),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+            return btoa(String.fromCharCode(...new Uint8Array(signature)));
         }
         
         // Google Vision API 호출 (CORS 우회 방법)
