@@ -205,6 +205,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script>
         // 전역 변수
         var stream = null;
@@ -354,103 +355,101 @@
             reader.readAsDataURL(file);
         }
         
-        // 이미지 처리 (실제 OCR)
+        // 이미지 처리 (Tesseract.js OCR)
         function processImage() {
-            updateStatus('Google Vision API로 텍스트 인식 중...');
+            updateStatus('Tesseract.js로 텍스트 인식 중...');
             
             // 로딩 표시
             document.getElementById('loading').className = 'loading show';
             document.getElementById('results').className = 'results';
             
-            // 실제 Google Vision API 호출
-            performOCR(imageData)
-                .then(function(result) {
+            // 진행률 표시
+            var loadingText = document.querySelector('.loading p');
+            loadingText.textContent = 'OCR 엔진 초기화 중...';
+            
+            // Tesseract.js로 OCR 수행
+            Tesseract.recognize(
+                imageData,
+                'kor+eng', // 한국어 + 영어
+                {
+                    logger: function(m) {
+                        console.log('OCR 진행:', m);
+                        if (m.status === 'recognizing text') {
+                            var progress = Math.round(m.progress * 100);
+                            loadingText.textContent = '텍스트 인식 중... ' + progress + '%';
+                            updateStatus('OCR 진행률: ' + progress + '%');
+                        } else if (m.status === 'loading language traineddata') {
+                            loadingText.textContent = '언어 데이터 로딩 중...';
+                            updateStatus('언어 데이터 로딩 중...');
+                        } else if (m.status === 'initializing tesseract') {
+                            loadingText.textContent = 'OCR 엔진 초기화 중...';
+                            updateStatus('OCR 엔진 초기화 중...');
+                        }
+                    }
+                }
+            ).then(function(result) {
+                console.log('=== Tesseract.js 전체 결과 ===');
+                console.log(result);
+                
+                var fullText = result.data.text;
+                console.log('=== 인식된 전체 텍스트 ===');
+                console.log(fullText);
+                console.log('=== 텍스트 길이 ===');
+                console.log(fullText.length + '글자');
+                
+                if (fullText.trim().length > 0) {
+                    var parsedResult = parseReceiptText(fullText);
+                    console.log('=== 파싱 결과 ===');
+                    console.log(parsedResult);
+                    
                     // 결과 표시
-                    document.getElementById('resultDate').textContent = result.date;
-                    document.getElementById('resultBusiness').textContent = result.business;
-                    document.getElementById('resultAmount').textContent = result.amount.toLocaleString() + '원';
-                    document.getElementById('resultCategory').textContent = result.category;
+                    document.getElementById('resultDate').textContent = parsedResult.date;
+                    document.getElementById('resultBusiness').textContent = parsedResult.business;
+                    document.getElementById('resultAmount').textContent = parsedResult.amount.toLocaleString() + '원';
+                    document.getElementById('resultCategory').textContent = parsedResult.category;
                     
-                    // 로딩 숨기고 결과 표시
-                    document.getElementById('loading').className = 'loading';
-                    document.getElementById('results').className = 'results show';
-                    
-                    updateStatus('OCR 분석 완료!');
-                })
-                .catch(function(error) {
-                    console.error('OCR 오류:', error);
-                    updateStatus('OCR 실패, 시뮬레이션 결과 표시');
-                    
-                    // OCR 실패 시 시뮬레이션으로 대체
-                    var result = getSimulationResult();
-                    document.getElementById('resultDate').textContent = result.date;
-                    document.getElementById('resultBusiness').textContent = result.business + ' (시뮬레이션)';
-                    document.getElementById('resultAmount').textContent = result.amount.toLocaleString() + '원';
-                    document.getElementById('resultCategory').textContent = result.category;
-                    
-                    document.getElementById('loading').className = 'loading';
-                    document.getElementById('results').className = 'results show';
-                });
-        }
-        
-        // Google Vision API 호출
-        function performOCR(imageDataUrl) {
-            return new Promise(function(resolve, reject) {
-                // base64 이미지 데이터에서 헤더 제거
-                var base64Image = imageDataUrl.split(',')[1];
+                    updateStatus('OCR 완료! 텍스트 ' + fullText.length + '글자 인식됨');
+                } else {
+                    console.log('=== 텍스트 인식 실패 ===');
+                    throw new Error('텍스트가 인식되지 않았습니다');
+                }
                 
-                var requestBody = {
-                    requests: [{
-                        image: {
-                            content: base64Image
-                        },
-                        features: [{
-                            type: 'TEXT_DETECTION',
-                            maxResults: 10
-                        }]
-                    }]
-                };
+                // 로딩 숨기고 결과 표시
+                document.getElementById('loading').className = 'loading';
+                document.getElementById('results').className = 'results show';
                 
-                // API 요청
-                fetch(GOOGLE_VISION_URL + '?key=' + GOOGLE_API_KEY, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                })
-                .then(function(response) {
-                    if (!response.ok) {
-                        throw new Error('API 요청 실패: ' + response.statusText);
-                    }
-                    return response.json();
-                })
-                .then(function(data) {
-                    console.log('Google Vision API 응답:', data);
-                    
-                    if (data.responses && data.responses[0] && data.responses[0].textAnnotations) {
-                        var fullText = data.responses[0].textAnnotations[0].description;
-                        console.log('인식된 텍스트:', fullText);
-                        var result = parseReceiptText(fullText);
-                        resolve(result);
-                    } else {
-                        throw new Error('텍스트를 인식할 수 없습니다');
-                    }
-                })
-                .catch(function(error) {
-                    console.error('API 오류:', error);
-                    reject(error);
-                });
+            }).catch(function(error) {
+                console.error('=== Tesseract.js 오류 ===');
+                console.error(error);
+                updateStatus('OCR 실패: ' + error.message);
+                
+                // OCR 실패 시 시뮬레이션으로 대체
+                var result = getSimulationResult();
+                document.getElementById('resultDate').textContent = result.date;
+                document.getElementById('resultBusiness').textContent = result.business + ' (OCR 실패)';
+                document.getElementById('resultAmount').textContent = result.amount.toLocaleString() + '원';
+                document.getElementById('resultCategory').textContent = result.category;
+                
+                document.getElementById('loading').className = 'loading';
+                document.getElementById('results').className = 'results show';
             });
         }
         
+        // Google Vision API 호출 함수 제거 (더 이상 사용하지 않음)
+        // 대신 Tesseract.js 사용
+        
         // 인식된 텍스트 분석
         function parseReceiptText(text) {
+            console.log('=== 텍스트 파싱 시작 ===');
+            console.log('원본 텍스트:', text);
+            
             var lines = text.split('\n').map(function(line) {
                 return line.trim();
             }).filter(function(line) {
                 return line.length > 0;
             });
+            
+            console.log('분할된 줄:', lines);
             
             var date = '';
             var business = '';
@@ -466,6 +465,7 @@
                     var month = dateMatch[2].padStart(2, '0');
                     var day = dateMatch[3].padStart(2, '0');
                     date = year + '-' + month + '-' + day;
+                    console.log('날짜 발견:', date, '(원본:', line, ')');
                     break;
                 }
             }
@@ -479,6 +479,7 @@
                     !line.includes('영수증') &&
                     !line.includes('receipt')) {
                     business = line;
+                    console.log('업체명 발견:', business, '(라인', i, ')');
                     break;
                 }
             }
@@ -494,17 +495,20 @@
                         var num = parseInt(cleanNumber);
                         if (num >= 100 && num <= 1000000) {
                             amounts.push(num);
+                            console.log('금액 후보:', num, '(원본:', line, ')');
                         }
                     }
                 }
             }
             if (amounts.length > 0) {
                 amount = Math.max.apply(Math, amounts);
+                console.log('최종 금액:', amount);
             }
             
             // 적요 자동 분류
             var fullTextLower = text.toLowerCase();
             var businessLower = business.toLowerCase();
+            console.log('분류용 텍스트:', businessLower);
             
             if (businessLower.includes('스타벅스') || businessLower.includes('카페') || businessLower.includes('커피')) {
                 category = '간식대';
@@ -524,12 +528,16 @@
                 category = '기타';
             }
             
-            return {
+            console.log('=== 최종 파싱 결과 ===');
+            var result = {
                 date: date || new Date().toISOString().split('T')[0],
                 business: business || '인식 실패',
                 amount: amount || 0,
                 category: category
             };
+            console.log(result);
+            
+            return result;
         }
         
         // 시뮬레이션 결과 (OCR 실패 시 백업)
@@ -542,19 +550,13 @@
                 var category = categories[Math.floor(Math.random() * categories.length)];
                 var today = new Date().toISOString().split('T')[0];
                 
-                // 결과 표시
-                document.getElementById('resultDate').textContent = today;
-                document.getElementById('resultBusiness').textContent = business;
-                document.getElementById('resultAmount').textContent = amount.toLocaleString() + '원';
-                document.getElementById('resultCategory').textContent = category;
-                
-                // 로딩 숨기고 결과 표시
-                document.getElementById('loading').className = 'loading';
-                document.getElementById('results').className = 'results show';
-                
-                updateStatus('분석 완료');
-            }, 2000);
-        }
+                return {
+                    date: today,
+                    business: business,
+                    amount: amount,
+                    category: category
+                };
+            }
     </script>
 </body>
 </html>
