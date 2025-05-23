@@ -22,15 +22,17 @@
                 stream.getTracks().forEach(function(track) {
                     track.stop();
                 });
+                stream = null;
             }
             
             // 카메라 모드 전환
             currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
             var cameraName = currentFacingMode === 'environment' ? '후면' : '전면';
             
+            // 더 호환성 높은 방식으로 시도
             var constraints = {
                 video: {
-                    facingMode: { exact: currentFacingMode },
+                    facingMode: currentFacingMode, // exact 제거
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
@@ -42,15 +44,39 @@
                     var video = document.getElementById('camera');
                     video.srcObject = stream;
                     video.play();
-                    updateStatus(cameraName + ' 카메라로 전환됨');
+                    updateStatus(cameraName + ' 카메라로 전환 성공');
                 })
                 .catch(function(error) {
                     console.error('카메라 전환 오류:', error);
-                    updateStatus('카메라 전환 실패: ' + error.message);
+                    updateStatus('카메라 전환 실패, 다시 시도...');
                     
-                    // 원래 모드로 되돌리기
-                    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-                    startCamera();
+                    // 더 간단한 방식으로 재시도
+                    var simpleConstraints = {
+                        video: currentFacingMode === 'environment' ? 
+                            { facingMode: { ideal: 'environment' } } : 
+                            { facingMode: { ideal: 'user' } }
+                    };
+                    
+                    navigator.mediaDevices.getUserMedia(simpleConstraints)
+                        .then(function(mediaStream) {
+                            stream = mediaStream;
+                            var video = document.getElementById('camera');
+                            video.srcObject = stream;
+                            video.play();
+                            updateStatus(cameraName + ' 카메라로 전환 성공 (호환 모드)');
+                        })
+                        .catch(function(error2) {
+                            console.error('재시도도 실패:', error2);
+                            updateStatus('카메라 전환 실패: ' + error2.message);
+                            
+                            // 원래 모드로 되돌리기
+                            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+                            
+                            // 기본 카메라로 다시 시작
+                            setTimeout(function() {
+                                startCamera();
+                            }, 1000);
+                        });
                 });
         }
         .container {
@@ -196,6 +222,9 @@
         window.onload = function() {
             updateStatus('JavaScript 로드 완료');
             
+            // 사용 가능한 카메라 확인
+            checkAvailableCameras();
+            
             // 버튼 이벤트 등록
             document.getElementById('startBtn').onclick = startCamera;
             document.getElementById('captureBtn').onclick = capturePhoto;
@@ -207,6 +236,34 @@
             
             updateStatus('이벤트 리스너 등록 완료');
         };
+        
+        // 사용 가능한 카메라 확인
+        function checkAvailableCameras() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                updateStatus('카메라 정보를 확인할 수 없습니다');
+                return;
+            }
+            
+            navigator.mediaDevices.enumerateDevices()
+                .then(function(devices) {
+                    var videoDevices = devices.filter(function(device) {
+                        return device.kind === 'videoinput';
+                    });
+                    
+                    updateStatus('카메라 ' + videoDevices.length + '개 감지됨');
+                    console.log('사용 가능한 카메라:', videoDevices);
+                    
+                    // 카메라가 1개뿐이면 전환 버튼 숨기기
+                    if (videoDevices.length <= 1) {
+                        document.getElementById('switchBtn').style.display = 'none';
+                        updateStatus('카메라 1개 감지 - 전환 버튼 숨김');
+                    }
+                })
+                .catch(function(error) {
+                    console.error('카메라 확인 오류:', error);
+                    updateStatus('카메라 확인 오류: ' + error.message);
+                });
+        }
         
         // 카메라 시작
         function startCamera() {
