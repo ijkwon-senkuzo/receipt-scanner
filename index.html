@@ -484,13 +484,22 @@
         
         function handleFileUpload(event) {
             const file = event.target.files[0];
-            if (file) {
+            console.log('파일 선택됨:', file);
+            
+            if (file && file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
+                    console.log('파일 읽기 완료');
                     capturedImageData = e.target.result;
                     processImage(capturedImageData);
                 };
+                reader.onerror = function(e) {
+                    console.error('파일 읽기 오류:', e);
+                    alert('파일을 읽을 수 없습니다.');
+                };
                 reader.readAsDataURL(file);
+            } else {
+                alert('이미지 파일만 업로드 가능합니다.');
             }
         }
         
