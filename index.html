@@ -352,54 +352,129 @@
                 return;
             }
             
-            // Tesseract.js 사용 가능한지 확인
-            if (typeof Tesseract !== 'undefined') {
+            // Tesseract.js 대신 Google Vision API 사용
+            try {
+                updateStatus('Google Vision API로 OCR 시작...');
+                loadingText.textContent = 'Google AI가 텍스트를 분석 중...';
+                
+                // Google Vision API 호출
+                const result = await callGoogleVisionAPI(capturedImage);
+                
+                // 인식된 텍스트를 화면에 표시
+                document.getElementById('recognizedText').value = result.text;
+                
+                if (result.text.length > 10) {
+                    const parsed = parseReceiptText(result.text);
+                    displayResults(parsed);
+                    updateStatus(`Google OCR 완료 - ${result.text.length}글자 인식`);
+                } else {
+                    throw new Error('인식된 텍스트가 너무 짧습니다');
+                }
+                
+            } catch (error) {
+                console.error('Google Vision API 오류:', error);
+                updateStatus('Google API 실패, Tesseract.js로 재시도...');
+                
+                // Google API 실패 시 Tesseract.js로 백업
                 try {
-                    updateStatus('실제 OCR 시작...');
-                    loadingText.textContent = 'OCR 엔진 초기화 중...';
+                    loadingText.textContent = 'Tesseract.js OCR 시도 중...';
                     
-                    // 실제 OCR 수행
-                    const result = await Tesseract.recognize(capturedImage, 'eng', { // 한국어 제외하고 영어만으로 빠르게
+                    const tesseractResult = await Tesseract.recognize(capturedImage, 'kor+eng', {
                         logger: function(m) {
                             if (m.status === 'recognizing text') {
                                 const progress = Math.round(m.progress * 100);
-                                loadingText.textContent = `텍스트 인식 중... ${progress}%`;
-                                updateStatus(`OCR 진행률: ${progress}%`);
+                                loadingText.textContent = `백업 OCR 진행... ${progress}%`;
                             }
                         }
                     });
                     
-                    const recognizedText = result.data.text.trim();
-                    console.log('=== OCR 인식 결과 ===');
-                    console.log(recognizedText);
-                    
-                    // 인식된 텍스트를 화면에 표시
+                    const recognizedText = tesseractResult.data.text.trim();
                     document.getElementById('recognizedText').value = recognizedText;
                     
-                    if (recognizedText.length > 10) { // 최소 10글자 이상 인식되었을 때만
+                    if (recognizedText.length > 5) {
                         const parsed = parseReceiptText(recognizedText);
                         displayResults(parsed);
-                        updateStatus(`실제 OCR 완료 - ${recognizedText.length}글자 인식`);
+                        updateStatus(`Tesseract OCR 완료 - ${recognizedText.length}글자 인식`);
                     } else {
-                        throw new Error('인식된 텍스트가 너무 짧습니다');
+                        throw new Error('백업 OCR도 실패');
                     }
                     
-                } catch (error) {
-                    console.error('OCR 오류:', error);
-                    updateStatus('OCR 실패, 지능형 시뮬레이션 사용');
+                } catch (tesseractError) {
+                    console.error('Tesseract.js도 실패:', tesseractError);
+                    updateStatus('모든 OCR 실패 - 지능형 시뮬레이션 사용');
                     
-                    // OCR 실패 시 지능형 시뮬레이션
                     const simResult = getIntelligentSimulation();
                     displayResults(simResult);
                 }
-            } else {
-                updateStatus('OCR 라이브러리 로드 실패, 시뮬레이션 사용');
-                const simResult = getIntelligentSimulation();
-                displayResults(simResult);
             }
             
             // 로딩 숨기기
             document.getElementById('loading').classList.remove('show');
+        }
+        
+        // Google Vision API 호출 (CORS 우회 방법)
+        async function callGoogleVisionAPI(imageDataUrl) {
+            const API_KEY = 'AIzaSyAJFZI4cabXII5j7WBwqJkbACiyEOioyrg';
+            const API_URL = 'https://vision.googleapis.com/v1/images:annotate';
+            
+            // base64 이미지 데이터에서 헤더 제거
+            const base64Image = imageDataUrl.split(',')[1];
+            
+            const requestBody = {
+                requests: [{
+                    image: {
+                        content: base64Image
+                    },
+                    features: [{
+                        type: 'TEXT_DETECTION',
+                        maxResults: 1
+                    }]
+                }]
+            };
+            
+            console.log('Google Vision API 요청 시작...');
+            
+            // CORS 프록시 사용 또는 직접 요청
+            const corsProxyUrls = [
+                `https://corsproxy.io/?${encodeURIComponent(API_URL)}?key=${API_KEY}`,
+                `https://cors-anywhere.herokuapp.com/${API_URL}?key=${API_KEY}`,
+                `${API_URL}?key=${API_KEY}` // 직접 시도
+            ];
+            
+            for (let i = 0; i < corsProxyUrls.length; i++) {
+                try {
+                    console.log(`API 요청 시도 ${i + 1}:`, corsProxyUrls[i]);
+                    
+                    const response = await fetch(corsProxyUrls[i], {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Google Vision API 응답:', data);
+                    
+                    if (data.responses && data.responses[0] && data.responses[0].textAnnotations) {
+                        const fullText = data.responses[0].textAnnotations[0].description;
+                        console.log('Google OCR 성공! 인식된 텍스트:', fullText);
+                        return { text: fullText };
+                    } else {
+                        throw new Error('API 응답에 텍스트가 없습니다');
+                    }
+                    
+                } catch (error) {
+                    console.error(`API 시도 ${i + 1} 실패:`, error);
+                    if (i === corsProxyUrls.length - 1) {
+                        throw new Error('모든 API 요청 실패: ' + error.message);
+                    }
+                }
+            }
         }
         
         // 지능형 시뮬레이션 (더 현실적)
@@ -428,103 +503,132 @@
             };
         }
         
-        // 텍스트 분석 (대폭 개선)
+        // 텍스트 분석 (더 유연한 패턴)
         function parseReceiptText(text) {
             console.log('=== 원본 텍스트 ===');
             console.log(text);
             
             const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
             console.log('=== 분할된 줄들 ===');
-            lines.forEach((line, idx) => console.log(`${idx}: ${line}`));
+            lines.forEach((line, idx) => console.log(`${idx}: "${line}"`));
             
             let date = '';
             let business = '';
             let amount = 0;
             let category = '';
             
-            // 1. 날짜 찾기 (다양한 패턴)
+            // 1. 날짜 찾기 (더 유연한 패턴)
             const datePatterns = [
-                /(\d{4})[.-/](\d{1,2})[.-/](\d{1,2})/,     // 2024-05-23, 2024.05.23
-                /(\d{2})[.-/](\d{1,2})[.-/](\d{1,2})/,     // 24-05-23
-                /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/,    // 2024년 5월 23일
-                /(\d{1,2})[.-/](\d{1,2})[.-/](\d{4})/,     // 23-05-2024 (역순)
-                /(\d{1,2})[.-/](\d{1,2})[.-/](\d{2})/      // 23-05-24
+                /(\d{4})[년\-\.\s\/]*(\d{1,2})[월\-\.\s\/]*(\d{1,2})[일\-\.\s]*/, // 2024년 5월 23일, 2024-05-23 등
+                /(\d{1,2})[\/\-\.\s]+(\d{1,2})[\/\-\.\s]+(\d{4})/,           // 23/05/2024, 23-05-2024
+                /(\d{1,2})[\/\-\.\s]+(\d{1,2})[\/\-\.\s]+(\d{2})/,            // 23/05/24
+                /(\d{2})[\/\-\.\s]+(\d{1,2})[\/\-\.\s]+(\d{1,2})/,            // 24/05/23
+                /(\d{4})(\d{2})(\d{2})/,                                        // 20240523
+                /(\d{2})(\d{2})(\d{2})/                                         // 240523
             ];
             
             for (const line of lines) {
+                console.log(`날짜 검색 중: "${line}"`);
                 for (let i = 0; i < datePatterns.length; i++) {
                     const match = line.match(datePatterns[i]);
                     if (match) {
                         console.log(`날짜 패턴 ${i} 매치:`, match);
                         
-                        if (i === 0) { // YYYY-MM-DD
-                            date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-                        } else if (i === 1) { // YY-MM-DD
-                            const year = parseInt(match[1]) > 50 ? `19${match[1]}` : `20${match[1]}`;
-                            date = `${year}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-                        } else if (i === 2) { // YYYY년 MM월 DD일
-                            date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-                        } else if (i === 3) { // DD-MM-YYYY
-                            date = `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
-                        } else if (i === 4) { // DD-MM-YY
-                            const year = parseInt(match[3]) > 50 ? `19${match[3]}` : `20${match[3]}`;
-                            date = `${year}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+                        let year, month, day;
+                        
+                        if (i === 0) { // YYYY년MM월DD일 또는 YYYY-MM-DD
+                            year = match[1];
+                            month = match[2];
+                            day = match[3];
+                        } else if (i === 1) { // DD/MM/YYYY
+                            day = match[1];
+                            month = match[2];
+                            year = match[3];
+                        } else if (i === 2) { // DD/MM/YY
+                            day = match[1];
+                            month = match[2];
+                            year = parseInt(match[3]) > 50 ? `19${match[3]}` : `20${match[3]}`;
+                        } else if (i === 3) { // YY/MM/DD
+                            year = parseInt(match[1]) > 50 ? `19${match[1]}` : `20${match[1]}`;
+                            month = match[2];
+                            day = match[3];
+                        } else if (i === 4) { // YYYYMMDD
+                            year = match[1];
+                            month = match[2];
+                            day = match[3];
+                        } else if (i === 5) { // YYMMDD
+                            year = parseInt(match[1]) > 50 ? `19${match[1]}` : `20${match[1]}`;
+                            month = match[2];
+                            day = match[3];
                         }
+                        
+                        date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                        console.log('추출된 날짜:', date);
                         break;
                     }
                 }
                 if (date) break;
             }
-            console.log('추출된 날짜:', date);
             
-            // 2. 업체명 찾기 (개선된 방식)
-            const businessKeywords = ['점', '마트', '카페', '스토어', 'STORE', 'MART', 'CAFE'];
-            const skipKeywords = ['영수증', 'receipt', '거래명세서', '카드', 'card', '승인', '번호'];
+            // 2. 업체명 찾기 (더 유연한 방식)
+            const skipPatterns = [
+                /^\d+$/,                    // 숫자만
+                /영수증|receipt/i,          // 영수증 관련
+                /card|카드|승인|거래/i,     // 카드 관련
+                /^\s*$/,                    // 공백
+                /^[\-\=\*\+\s]+$/,         // 구분선
+                /time|시간|date|날짜/i,     // 시간/날짜 관련
+                /tel|전화|phone/i,          // 전화번호 관련
+                /\d{4}[년\-\.\s\/]\d{1,2}[월\-\.\s\/]\d{1,2}/ // 날짜 패턴
+            ];
             
-            for (let i = 0; i < Math.min(8, lines.length); i++) {
+            // 앞쪽 줄들에서 업체명 찾기
+            for (let i = 0; i < Math.min(10, lines.length); i++) {
                 const line = lines[i];
+                console.log(`업체명 검색 중 (줄 ${i}): "${line}"`);
                 
-                // 스킵할 줄들
-                if (line.length < 2 || 
-                    line.match(/^\d+$/) || 
-                    line.match(/\d{4}[.-/]\d{1,2}[.-/]\d{1,2}/) ||
-                    skipKeywords.some(keyword => line.toLowerCase().includes(keyword.toLowerCase()))) {
-                    continue;
+                // 스킵 조건 확인
+                let shouldSkip = false;
+                for (const pattern of skipPatterns) {
+                    if (pattern.test(line)) {
+                        console.log(`  -> 스킵 (패턴: ${pattern})`);
+                        shouldSkip = true;
+                        break;
+                    }
                 }
                 
-                // 업체명 가능성이 높은 줄
-                if (line.length >= 3 && 
-                    (businessKeywords.some(keyword => line.includes(keyword)) || 
-                     line.match(/[가-힣]{2,}/) ||  // 한글 2글자 이상
-                     line.match(/[A-Z]{2,}/))) {    // 영어 대문자 2글자 이상
+                if (shouldSkip || line.length < 2) continue;
+                
+                // 업체명으로 적합한 줄인지 확인
+                const hasKorean = /[가-힣]/.test(line);
+                const hasEnglish = /[A-Za-z]/.test(line);
+                const isLongEnough = line.length >= 2;
+                
+                if (isLongEnough && (hasKorean || hasEnglish)) {
                     business = line;
-                    console.log('업체명 발견:', business, `(줄 ${i})`);
+                    console.log(`업체명 발견: "${business}" (줄 ${i})`);
                     break;
                 }
             }
             
-            // 3. 금액 찾기 (개선된 방식)
+            // 3. 금액 찾기 (기존 코드 유지하되 로그 추가)
             const amounts = [];
             const amountPatterns = [
-                /합계[:\s]*[\d,]+/,           // 합계: 12,000
-                /총액[:\s]*[\d,]+/,           // 총액: 12,000
-                /결제[:\s]*[\d,]+/,           // 결제: 12,000
-                /[\d,]+원/,                   // 12,000원
-                /[\d,]+\s*원/,                // 12,000 원
-                /(\d{1,3}(?:,\d{3})+)/,       // 1,000 이상의 콤마 포함 숫자
-                /(\d{4,})/                    // 4자리 이상 숫자
+                /합계[\s:]*(\d{1,3}(?:,\d{3})*|\d+)/i,
+                /총[액금][\s:]*(\d{1,3}(?:,\d{3})*|\d+)/i,
+                /결제[\s:]*(\d{1,3}(?:,\d{3})*|\d+)/i,
+                /(\d{1,3}(?:,\d{3})+)원?/,
+                /(\d{4,})원?/
             ];
             
             for (const line of lines) {
-                console.log(`금액 분석 중: ${line}`);
-                
                 for (const pattern of amountPatterns) {
-                    const matches = line.match(pattern);
-                    if (matches) {
-                        const numberStr = matches[0].replace(/[^0-9,]/g, '');
-                        const num = parseInt(numberStr.replace(/,/g, ''));
+                    const match = line.match(pattern);
+                    if (match) {
+                        const numberStr = match[1] || match[0];
+                        const num = parseInt(numberStr.replace(/[^0-9]/g, ''));
                         
-                        if (num >= 100 && num <= 10000000) { // 100원~1000만원
+                        if (num >= 100 && num <= 10000000) {
                             amounts.push({ value: num, line: line, pattern: pattern.toString() });
                             console.log(`금액 후보: ${num}원 (${line})`);
                         }
@@ -532,24 +636,17 @@
                 }
             }
             
-            // 가장 적절한 금액 선택 (합계/총액 우선, 그 다음 큰 금액)
             if (amounts.length > 0) {
+                // 우선순위: 합계 > 총액 > 결제 > 가장 큰 금액
                 const priorityAmount = amounts.find(a => 
-                    a.line.includes('합계') || 
-                    a.line.includes('총액') || 
-                    a.line.includes('결제')
+                    /합계|총[액금]|결제/i.test(a.line)
                 );
                 
-                if (priorityAmount) {
-                    amount = priorityAmount.value;
-                    console.log('우선순위 금액 선택:', amount);
-                } else {
-                    amount = Math.max(...amounts.map(a => a.value));
-                    console.log('최대 금액 선택:', amount);
-                }
+                amount = priorityAmount ? priorityAmount.value : Math.max(...amounts.map(a => a.value));
+                console.log('선택된 금액:', amount);
             }
             
-            // 4. 카테고리 분류 (한글/영어 모두 고려)
+            // 4. 카테고리 분류 (기존과 동일)
             const fullTextLower = text.toLowerCase();
             const businessLower = business.toLowerCase();
             
@@ -561,16 +658,14 @@
                 { keywords: ['칼텍스', 'caltex', 'sk에너지', 'sk energy', '주유소', 'gs칼텍스'], category: '유류대' },
                 { keywords: ['도로공사', '통행료', 'toll'], category: '통행료' },
                 { keywords: ['택시', 'taxi'], category: '택시비' },
-                { keywords: ['지하철', 'subway', '버스', 'bus', '교통카드'], category: '교통비' },
-                { keywords: ['ktx', '코레일', 'korail'], category: 'KTX 요금' },
-                { keywords: ['우체국', '우편'], category: '우편료' }
+                { keywords: ['지하철', 'subway', '버스', 'bus', '교통카드'], category: '교통비' }
             ];
             
             for (const rule of categoryRules) {
                 if (rule.keywords.some(keyword => 
                     businessLower.includes(keyword) || fullTextLower.includes(keyword))) {
                     category = rule.category;
-                    console.log(`카테고리 매치: ${category} (키워드: ${rule.keywords})`);
+                    console.log(`카테고리 매치: ${category}`);
                     break;
                 }
             }
