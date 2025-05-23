@@ -3,14 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>영수증 스캐너</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -31,17 +26,9 @@
             padding: 30px;
             text-align: center;
         }
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        .main-content {
-            padding: 30px;
-        }
-        .camera-section {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .main-content { padding: 30px; }
+        .camera-section { text-align: center; margin-bottom: 30px; }
         video {
             width: 100%;
             max-width: 400px;
@@ -51,12 +38,8 @@
             background: #f5f5f5;
             object-fit: cover;
         }
-        .controls {
-            margin: 20px 0;
-            text-align: center;
-        }
+        .controls { margin: 20px 0; text-align: center; }
         .btn {
-            display: inline-block;
             background: #007bff;
             color: white;
             border: none;
@@ -66,28 +49,14 @@
             cursor: pointer;
             font-size: 16px;
             font-weight: 600;
-            transition: all 0.3s ease;
-            text-decoration: none;
             min-width: 200px;
+            touch-action: manipulation;
         }
-        .btn:hover {
-            background: #0056b3;
-            transform: translateY(-2px);
-        }
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .btn-upload {
-            background: #28a745;
-        }
-        .btn-upload:hover {
-            background: #1e7e34;
-        }
-        input[type="file"] {
-            display: none;
-        }
+        .btn:active { background: #0056b3; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-upload { background: #28a745; }
+        .btn-upload:active { background: #1e7e34; }
+        input[type="file"] { display: none; }
         .results {
             background: #f8f9fa;
             padding: 25px;
@@ -95,42 +64,24 @@
             margin-top: 25px;
             display: none;
         }
-        .results.show {
-            display: block;
-            animation: slideIn 0.5s ease;
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .results.show { display: block; }
         .result-item {
             display: flex;
             justify-content: space-between;
-            align-items: center;
             margin: 15px 0;
             padding: 15px;
             background: white;
             border-radius: 8px;
             border-left: 4px solid #007bff;
         }
-        .result-label {
-            font-weight: bold;
-            color: #333;
-            font-size: 16px;
-        }
-        .result-value {
-            font-size: 16px;
-            color: #666;
-            font-weight: 500;
-        }
+        .result-label { font-weight: bold; color: #333; }
+        .result-value { color: #666; font-weight: 500; }
         .loading {
             text-align: center;
             padding: 30px;
             display: none;
         }
-        .loading.show {
-            display: block;
-        }
+        .loading.show { display: block; }
         .spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #007bff;
@@ -152,16 +103,27 @@
             font-size: 14px;
             text-align: center;
         }
+        .recognized-text {
+            background: #f0f8ff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .recognized-text textarea {
+            width: 100%;
+            height: 120px;
+            border: none;
+            resize: vertical;
+            font-family: monospace;
+            font-size: 12px;
+        }
         @media (max-width: 600px) {
             .header h1 { font-size: 2em; }
             .main-content { padding: 20px; }
             video { height: 250px; }
             .btn { width: 90%; margin: 5px; }
-            .result-item { 
-                flex-direction: column; 
-                text-align: center; 
-                gap: 8px;
-            }
+            .result-item { flex-direction: column; text-align: center; gap: 8px; }
         }
     </style>
 </head>
@@ -178,10 +140,10 @@
             </div>
             
             <div class="controls">
-                <button class="btn" onclick="startCamera()">📷 후면 카메라 시작</button>
-                <button class="btn" id="captureBtn" onclick="capturePhoto()" disabled>📸 사진 촬영</button>
-                <button class="btn btn-upload" onclick="document.getElementById('fileInput').click()">📁 사진 업로드</button>
-                <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
+                <button class="btn" id="startBtn">📷 후면 카메라 시작</button>
+                <button class="btn" id="captureBtn" disabled>📸 사진 촬영</button>
+                <button class="btn btn-upload" id="uploadBtn">📁 사진 업로드</button>
+                <input type="file" id="fileInput" accept="image/*">
             </div>
             
             <div class="loading" id="loading">
@@ -192,10 +154,9 @@
             <div class="results" id="results">
                 <h3 style="margin-bottom: 20px; color: #333;">🔍 분석 결과</h3>
                 
-                <!-- 인식된 텍스트 표시 영역 추가 -->
-                <div class="result-item" style="background: #f0f8ff; flex-direction: column; align-items: stretch;">
-                    <span class="result-label">📝 인식된 텍스트</span>
-                    <textarea id="recognizedText" readonly style="width: 100%; height: 120px; margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 12px; font-family: monospace; resize: vertical;"></textarea>
+                <div class="recognized-text">
+                    <strong>📝 인식된 텍스트:</strong>
+                    <textarea id="recognizedText" readonly placeholder="여기에 인식된 텍스트가 표시됩니다..."></textarea>
                 </div>
                 
                 <div class="result-item">
@@ -217,70 +178,40 @@
             </div>
             
             <div class="status">
-                <strong>상태:</strong> <span id="status">페이지 로드 완료</span>
+                <strong>상태:</strong> <span id="status">페이지 로드 중...</span>
             </div>
         </div>
     </div>
 
-    <!-- 실제 OCR 라이브러리 추가 -->
-    <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
-    
     <script>
+        console.log('✅ 스크립트 시작');
+        
         // 전역 변수
         let stream = null;
         let capturedImage = null;
         
         // 상태 업데이트
         function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.textContent = message;
+            }
             console.log('상태:', message);
         }
         
         // 카메라 시작
         async function startCamera() {
+            console.log('🎥 카메라 시작 함수 호출됨');
             updateStatus('카메라 시작 중...');
             
             try {
-                // 기존 스트림 정리
                 if (stream) {
                     stream.getTracks().forEach(track => track.stop());
-                    try {
-                        loadingText.textContent = 'Tesseract.js 백업 OCR 시도 중...';
-                        
-                        const tesseractResult = await Tesseract.recognize(capturedImage, 'kor+eng', {
-                            logger: function(m) {
-                                if (m.status === 'recognizing text') {
-                                    const progress = Math.round(m.progress * 100);
-                                    loadingText.textContent = `백업 OCR 진행... ${progress}%`;
-                                }
-                            }
-                        });
-                        
-                        const recognizedText = tesseractResult.data.text.trim();
-                        document.getElementById('recognizedText').value = recognizedText;
-                        
-                        if (recognizedText.length > 5) {
-                            const parsed = parseReceiptText(recognizedText);
-                            displayResults(parsed);
-                            updateStatus(`Tesseract OCR 완료 - ${recognizedText.length}글자 인식`);
-                        } else {
-                            throw new Error('백업 OCR도 실패');
-                        }
-                        
-                    } catch (tesseractError) {
-                        console.error('Tesseract.js도 실패:', tesseractError);
-                        updateStatus('모든 OCR 실패 - 지능형 시뮬레이션 사용');
-                        
-                        const simResult = getIntelligentSimulation();
-                        displayResults(simResult);
-                    }
                 }
-            }
                 
-                // 후면 카메라 설정
                 const constraints = {
                     video: {
-                        facingMode: 'environment', // 후면 카메라
+                        facingMode: 'environment',
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     }
@@ -290,16 +221,14 @@
                 const video = document.getElementById('camera');
                 video.srcObject = stream;
                 
-                // 비디오 재생 시작
                 await video.play();
                 
                 document.getElementById('captureBtn').disabled = false;
-                updateStatus('후면 카메라 시작됨 - 영수증을 화면에 맞춰주세요');
+                updateStatus('✅ 후면 카메라 시작됨 - 영수증을 화면에 맞춰주세요');
                 
             } catch (error) {
                 console.error('카메라 오류:', error);
                 
-                // 후면 카메라 실패 시 기본 카메라 시도
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ video: true });
                     const video = document.getElementById('camera');
@@ -307,36 +236,36 @@
                     await video.play();
                     
                     document.getElementById('captureBtn').disabled = false;
-                    updateStatus('기본 카메라 시작됨 (후면 카메라 사용 불가)');
+                    updateStatus('⚠️ 기본 카메라 시작됨');
                 } catch (error2) {
-                    updateStatus('카메라 접근 실패: ' + error2.message);
-                    alert('카메라에 접근할 수 없습니다.\n브라우저 설정에서 카메라 권한을 허용해주세요.');
+                    updateStatus('❌ 카메라 접근 실패: ' + error2.message);
+                    alert('카메라에 접근할 수 없습니다. 브라우저 설정을 확인해주세요.');
                 }
             }
         }
         
         // 사진 촬영
         function capturePhoto() {
+            console.log('📸 사진 촬영 함수 호출됨');
             updateStatus('사진 촬영 중...');
             
             const video = document.getElementById('camera');
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // 캔버스에 비디오 프레임 그리기
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
             
-            // 이미지 데이터 저장
             capturedImage = canvas.toDataURL('image/jpeg', 0.8);
             
-            updateStatus('사진 촬영 완료 - OCR 분석 시작');
+            updateStatus('📷 사진 촬영 완료 - OCR 분석 시작');
             processImage();
         }
         
         // 파일 업로드
         function handleFile(event) {
+            console.log('📁 파일 업로드 함수 호출됨');
             updateStatus('파일 업로드 중...');
             
             const file = event.target.files[0];
@@ -347,106 +276,33 @@
             
             if (!file.type.startsWith('image/')) {
                 alert('이미지 파일만 업로드 가능합니다');
-                updateStatus('잘못된 파일 형식');
+                updateStatus('❌ 잘못된 파일 형식');
                 return;
             }
             
             const reader = new FileReader();
             reader.onload = function(e) {
                 capturedImage = e.target.result;
-                updateStatus('파일 업로드 완료 - OCR 분석 시작');
+                updateStatus('📁 파일 업로드 완료 - OCR 분석 시작');
                 processImage();
             };
             reader.onerror = function() {
-                updateStatus('파일 읽기 실패');
+                updateStatus('❌ 파일 읽기 실패');
                 alert('파일을 읽을 수 없습니다');
             };
             
             reader.readAsDataURL(file);
         }
         
-        // 이미지 처리 (실제 OCR + 백업 시뮬레이션)
-        async function processImage() {
-            // 로딩 표시
-            document.getElementById('loading').classList.add('show');
-            document.getElementById('results').classList.remove('show');
-            
-            const loadingText = document.getElementById('loadingText');
-            updateStatus('이미지 분석 시작...');
-            
-            // 이미지가 정상적으로 캡처되었는지 확인
-            console.log('캡처된 이미지 데이터:', capturedImage ? '있음' : '없음');
-            
-            if (!capturedImage) {
-                updateStatus('이미지 데이터가 없습니다');
-                document.getElementById('loading').classList.remove('show');
-                return;
-            }
-            
-            // 네이버 Clova OCR 우선 시도
-            try {
-                updateStatus('네이버 Clova OCR로 분석 시작...');
-                loadingText.textContent = '네이버 AI가 영수증을 분석 중...';
-                
-                // 네이버 Clova OCR 호출
-                const result = await callClovaOCR(capturedImage);
-                
-                // 인식된 텍스트를 화면에 표시
-                document.getElementById('recognizedText').value = result.text;
-                
-                if (result.text.length > 10) {
-                    const parsed = parseReceiptText(result.text);
-                    displayResults(parsed);
-                    updateStatus(`네이버 Clova OCR 완료 - ${result.text.length}글자 인식`);
-                } else {
-                    throw new Error('인식된 텍스트가 너무 짧습니다');
-                }
-                
-            } catch (clovaError) {
-                console.error('네이버 Clova OCR 오류:', clovaError);
-                updateStatus('Clova OCR 실패, Google API로 재시도...');
-                
-                // Clova 실패 시 Google Vision API로 백업
-                try {
-                    loadingText.textContent = 'Google AI로 재분석 중...';
-                    const result = await callGoogleVisionAPI(capturedImage);
-                    
-                    document.getElementById('recognizedText').value = result.text;
-                    
-                    if (result.text.length > 10) {
-                        const parsed = parseReceiptText(result.text);
-                        displayResults(parsed);
-                        updateStatus(`Google OCR 완료 - ${result.text.length}글자 인식`);
-                    } else {
-                        throw new Error('Google OCR도 텍스트 부족');
-                    }
-                    
-                } catch (googleError) {
-                    console.error('Google API도 실패:', googleError);
-                    updateStatus('모든 클라우드 OCR 실패, Tesseract.js로 재시도...');
-                    
-                    // 최종 백업: Tesseract.js
-                }
-            }
-            
-            // 로딩 숨기기
-            document.getElementById('loading').classList.remove('show');
-        }
-        
         // 네이버 Clova OCR API 호출
         async function callClovaOCR(imageDataUrl) {
-            // 네이버 Clova OCR API 설정 (완전한 정보)
             const ACCESS_KEY = 'ncp_iam_BPAMKR2W2OjsLSKwByee';
             const SECRET_KEY = 'ncp_iam_BPKMKRWMJ2QIXCHWbKkgUs0sBVISvKQSPA';
             const CLOVA_API_URL = 'http://clovaocr-api-kr.ncloud.com/external/v1/42314/7ae4928fba21ca39ceee5a0c20a192ef6dec0d55461956f1f589685e63be1183';
             
-            console.log('네이버 Clova OCR 요청 준비 중...');
-            console.log('API URL:', CLOVA_API_URL);
+            console.log('🚀 네이버 Clova OCR 요청 시작');
             
-            // base64 이미지 데이터에서 헤더 제거
             const base64Image = imageDataUrl.split(',')[1];
-            
-            // 타임스탬프 생성
             const timestamp = Date.now().toString();
             
             const requestBody = {
@@ -460,376 +316,160 @@
                 timestamp: parseInt(timestamp)
             };
             
-            try {
-                console.log('🔥 네이버 Clova OCR API 호출 시작! 🔥');
-                console.log('요청 정보:', {
-                    url: CLOVA_API_URL,
-                    requestId: requestBody.requestId,
-                    imageFormat: requestBody.images[0].format,
-                    timestamp: timestamp
-                });
-                
-                const response = await fetch(CLOVA_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-OCR-SECRET': SECRET_KEY,
-                        'X-NCP-APIGW-TIMESTAMP': timestamp,
-                        'X-NCP-IAM-ACCESS-KEY': ACCESS_KEY
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-                
-                console.log('📡 API 응답 수신:', response.status, response.statusText);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('❌ Clova OCR API 오류:', {
-                        status: response.status,
-                        statusText: response.statusText,
-                        error: errorText
-                    });
-                    throw new Error(`Clova OCR API 오류 (${response.status}): ${errorText}`);
-                }
-                
-                const data = await response.json();
-                console.log('📄 네이버 Clova OCR 전체 응답:', data);
-                
-                // 응답에서 텍스트 추출
-                if (data.images && data.images[0] && data.images[0].fields) {
-                    let fullText = '';
-                    const fields = data.images[0].fields;
-                    
-                    console.log(`✨ 총 ${fields.length}개 필드 인식됨!`);
-                    
-                    fields.forEach((field, index) => {
-                        if (field.inferText) {
-                            const confidence = field.inferConfidence ? Math.round(field.inferConfidence * 100) : 'N/A';
-                            console.log(`📝 필드 ${index + 1}: "${field.inferText}" (신뢰도: ${confidence}%)`);
-                            fullText += field.inferText + '\n';
-                        }
-                    });
-                    
-                    if (fullText.trim().length > 0) {
-                        console.log('🎉 === 네이버 Clova OCR 성공! ===');
-                        console.log('📋 최종 인식 텍스트:');
-                        console.log(fullText);
-                        console.log(`📊 총 글자 수: ${fullText.trim().length}글자`);
-                        return { text: fullText.trim() };
-                    } else {
-                        throw new Error('Clova OCR 응답에 인식된 텍스트가 없습니다');
+            const response = await fetch(CLOVA_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-OCR-SECRET': SECRET_KEY,
+                    'X-NCP-APIGW-TIMESTAMP': timestamp,
+                    'X-NCP-IAM-ACCESS-KEY': ACCESS_KEY
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            console.log('📡 API 응답:', response.status, response.statusText);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ API 오류:', errorText);
+                throw new Error(`Clova OCR API 오류 (${response.status}): ${errorText}`);
+            }
+            
+            const data = await response.json();
+            console.log('📄 OCR 응답 데이터:', data);
+            
+            if (data.images && data.images[0] && data.images[0].fields) {
+                let fullText = '';
+                data.images[0].fields.forEach(field => {
+                    if (field.inferText) {
+                        fullText += field.inferText + '\n';
                     }
-                } else if (data.images && data.images[0] && data.images[0].convertedImageInfo) {
-                    // 다른 응답 구조일 경우
-                    console.log('🔄 다른 응답 구조 감지, 대안 파싱 시도...');
-                    throw new Error('예상과 다른 응답 구조입니다');
+                });
+                
+                if (fullText.trim().length > 0) {
+                    console.log('✅ Clova OCR 성공!');
+                    return { text: fullText.trim() };
+                }
+            }
+            
+            throw new Error('Clova OCR 응답에 텍스트가 없습니다');
+        }
+        
+        // 이미지 처리
+        async function processImage() {
+            console.log('🔄 이미지 처리 시작');
+            
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('results').classList.remove('show');
+            
+            const loadingText = document.getElementById('loadingText');
+            
+            if (!capturedImage) {
+                updateStatus('❌ 이미지 데이터가 없습니다');
+                document.getElementById('loading').classList.remove('show');
+                return;
+            }
+            
+            try {
+                updateStatus('🚀 네이버 Clova OCR로 분석 시작...');
+                loadingText.textContent = '네이버 AI가 영수증을 분석 중...';
+                
+                const result = await callClovaOCR(capturedImage);
+                
+                document.getElementById('recognizedText').value = result.text;
+                
+                if (result.text.length > 5) {
+                    const parsed = parseReceiptText(result.text);
+                    displayResults(parsed);
+                    updateStatus(`✅ 네이버 Clova OCR 완료 - ${result.text.length}글자 인식`);
                 } else {
-                    console.error('❌ 예상과 다른 응답 구조:', data);
-                    throw new Error('Clova OCR 응답에서 이미지 결과를 찾을 수 없습니다');
+                    throw new Error('인식된 텍스트가 너무 짧습니다');
                 }
                 
             } catch (error) {
-                console.error('💥 Clova OCR 호출 중 오류:', error);
-                throw error;
+                console.error('❌ OCR 오류:', error);
+                updateStatus('❌ OCR 실패 - 시뮬레이션 결과 표시');
+                
+                const simResult = {
+                    date: new Date().toISOString().split('T')[0],
+                    business: '스타벅스 강남점 (OCR 실패)',
+                    amount: Math.floor(Math.random() * 30000) + 2000,
+                    category: '간식대'
+                };
+                
+                document.getElementById('recognizedText').value = 'OCR 인식 실패\n시뮬레이션 결과를 표시합니다.';
+                displayResults(simResult);
             }
+            
+            document.getElementById('loading').classList.remove('show');
         }
         
-        // HMAC-SHA256 서명 생성 (간단한 구현)
-        async function createSignature(message, secret) {
-            const encoder = new TextEncoder();
-            const key = await crypto.subtle.importKey(
-                'raw',
-                encoder.encode(secret),
-                { name: 'HMAC', hash: 'SHA-256' },
-                false,
-                ['sign']
-            );
-            
-            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
-            return btoa(String.fromCharCode(...new Uint8Array(signature)));
-        }
-        
-        // Google Vision API 호출 (CORS 우회 방법)
-        async function callGoogleVisionAPI(imageDataUrl) {
-            const API_KEY = 'AIzaSyAJFZI4cabXII5j7WBwqJkbACiyEOioyrg';
-            const API_URL = 'https://vision.googleapis.com/v1/images:annotate';
-            
-            // base64 이미지 데이터에서 헤더 제거
-            const base64Image = imageDataUrl.split(',')[1];
-            
-            const requestBody = {
-                requests: [{
-                    image: {
-                        content: base64Image
-                    },
-                    features: [{
-                        type: 'TEXT_DETECTION',
-                        maxResults: 1
-                    }]
-                }]
-            };
-            
-            console.log('Google Vision API 요청 시작...');
-            
-            // CORS 프록시 사용 또는 직접 요청
-            const corsProxyUrls = [
-                `https://corsproxy.io/?${encodeURIComponent(API_URL)}?key=${API_KEY}`,
-                `https://cors-anywhere.herokuapp.com/${API_URL}?key=${API_KEY}`,
-                `${API_URL}?key=${API_KEY}` // 직접 시도
-            ];
-            
-            for (let i = 0; i < corsProxyUrls.length; i++) {
-                try {
-                    console.log(`API 요청 시도 ${i + 1}:`, corsProxyUrls[i]);
-                    
-                    const response = await fetch(corsProxyUrls[i], {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody)
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log('Google Vision API 응답:', data);
-                    
-                    if (data.responses && data.responses[0] && data.responses[0].textAnnotations) {
-                        const fullText = data.responses[0].textAnnotations[0].description;
-                        console.log('Google OCR 성공! 인식된 텍스트:', fullText);
-                        return { text: fullText };
-                    } else {
-                        throw new Error('API 응답에 텍스트가 없습니다');
-                    }
-                    
-                } catch (error) {
-                    console.error(`API 시도 ${i + 1} 실패:`, error);
-                    if (i === corsProxyUrls.length - 1) {
-                        throw new Error('모든 API 요청 실패: ' + error.message);
-                    }
-                }
-            }
-        }
-        
-        // 지능형 시뮬레이션 (더 현실적)
-        function getIntelligentSimulation() {
-            const now = new Date();
-            const businesses = [
-                { name: '스타벅스 강남점', category: '간식대', amountRange: [4000, 15000] },
-                { name: '맥도날드 서울역점', category: '식대', amountRange: [6000, 12000] },
-                { name: 'GS25 편의점', category: '간식대', amountRange: [1000, 8000] },
-                { name: '이마트 성수점', category: '생필품', amountRange: [15000, 80000] },
-                { name: 'SK주유소 서울점', category: '유류대', amountRange: [50000, 100000] },
-                { name: '서울교통공사', category: '교통비', amountRange: [1500, 3000] }
-            ];
-            
-            const randomBusiness = businesses[Math.floor(Math.random() * businesses.length)];
-            const amount = Math.floor(
-                Math.random() * (randomBusiness.amountRange[1] - randomBusiness.amountRange[0]) + 
-                randomBusiness.amountRange[0]
-            );
-            
-            return {
-                date: now.toISOString().split('T')[0],
-                business: randomBusiness.name,
-                amount: amount,
-                category: randomBusiness.category
-            };
-        }
-        
-        // 텍스트 분석 (더 유연한 패턴)
+        // 텍스트 분석
         function parseReceiptText(text) {
-            console.log('=== 원본 텍스트 ===');
-            console.log(text);
-            
-            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-            console.log('=== 분할된 줄들 ===');
-            lines.forEach((line, idx) => console.log(`${idx}: "${line}"`));
+            const lines = text.split('\n').filter(line => line.trim().length > 0);
             
             let date = '';
             let business = '';
             let amount = 0;
             let category = '';
             
-            // 1. 날짜 찾기 (더 유연한 패턴)
-            const datePatterns = [
-                /(\d{4})[년\-\.\s\/]*(\d{1,2})[월\-\.\s\/]*(\d{1,2})[일\-\.\s]*/, // 2024년 5월 23일, 2024-05-23 등
-                /(\d{1,2})[\/\-\.\s]+(\d{1,2})[\/\-\.\s]+(\d{4})/,           // 23/05/2024, 23-05-2024
-                /(\d{1,2})[\/\-\.\s]+(\d{1,2})[\/\-\.\s]+(\d{2})/,            // 23/05/24
-                /(\d{2})[\/\-\.\s]+(\d{1,2})[\/\-\.\s]+(\d{1,2})/,            // 24/05/23
-                /(\d{4})(\d{2})(\d{2})/,                                        // 20240523
-                /(\d{2})(\d{2})(\d{2})/                                         // 240523
-            ];
-            
+            // 날짜 찾기
             for (const line of lines) {
-                console.log(`날짜 검색 중: "${line}"`);
-                for (let i = 0; i < datePatterns.length; i++) {
-                    const match = line.match(datePatterns[i]);
-                    if (match) {
-                        console.log(`날짜 패턴 ${i} 매치:`, match);
-                        
-                        let year, month, day;
-                        
-                        if (i === 0) { // YYYY년MM월DD일 또는 YYYY-MM-DD
-                            year = match[1];
-                            month = match[2];
-                            day = match[3];
-                        } else if (i === 1) { // DD/MM/YYYY
-                            day = match[1];
-                            month = match[2];
-                            year = match[3];
-                        } else if (i === 2) { // DD/MM/YY
-                            day = match[1];
-                            month = match[2];
-                            year = parseInt(match[3]) > 50 ? `19${match[3]}` : `20${match[3]}`;
-                        } else if (i === 3) { // YY/MM/DD
-                            year = parseInt(match[1]) > 50 ? `19${match[1]}` : `20${match[1]}`;
-                            month = match[2];
-                            day = match[3];
-                        } else if (i === 4) { // YYYYMMDD
-                            year = match[1];
-                            month = match[2];
-                            day = match[3];
-                        } else if (i === 5) { // YYMMDD
-                            year = parseInt(match[1]) > 50 ? `19${match[1]}` : `20${match[1]}`;
-                            month = match[2];
-                            day = match[3];
-                        }
-                        
-                        date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                        console.log('추출된 날짜:', date);
-                        break;
-                    }
-                }
-                if (date) break;
-            }
-            
-            // 2. 업체명 찾기 (더 유연한 방식)
-            const skipPatterns = [
-                /^\d+$/,                    // 숫자만
-                /영수증|receipt/i,          // 영수증 관련
-                /card|카드|승인|거래/i,     // 카드 관련
-                /^\s*$/,                    // 공백
-                /^[\-\=\*\+\s]+$/,         // 구분선
-                /time|시간|date|날짜/i,     // 시간/날짜 관련
-                /tel|전화|phone/i,          // 전화번호 관련
-                /\d{4}[년\-\.\s\/]\d{1,2}[월\-\.\s\/]\d{1,2}/ // 날짜 패턴
-            ];
-            
-            // 앞쪽 줄들에서 업체명 찾기
-            for (let i = 0; i < Math.min(10, lines.length); i++) {
-                const line = lines[i];
-                console.log(`업체명 검색 중 (줄 ${i}): "${line}"`);
-                
-                // 스킵 조건 확인
-                let shouldSkip = false;
-                for (const pattern of skipPatterns) {
-                    if (pattern.test(line)) {
-                        console.log(`  -> 스킵 (패턴: ${pattern})`);
-                        shouldSkip = true;
-                        break;
-                    }
-                }
-                
-                if (shouldSkip || line.length < 2) continue;
-                
-                // 업체명으로 적합한 줄인지 확인
-                const hasKorean = /[가-힣]/.test(line);
-                const hasEnglish = /[A-Za-z]/.test(line);
-                const isLongEnough = line.length >= 2;
-                
-                if (isLongEnough && (hasKorean || hasEnglish)) {
-                    business = line;
-                    console.log(`업체명 발견: "${business}" (줄 ${i})`);
+                const dateMatch = line.match(/(\d{4})[년\-\.\s\/]*(\d{1,2})[월\-\.\s\/]*(\d{1,2})[일\-\.\s]*/);
+                if (dateMatch) {
+                    date = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
                     break;
                 }
             }
             
-            // 3. 금액 찾기 (기존 코드 유지하되 로그 추가)
+            // 업체명 찾기
+            for (const line of lines.slice(0, 5)) {
+                if (line.length > 2 && !line.match(/^\d+$/) && !line.includes('영수증')) {
+                    business = line.trim();
+                    break;
+                }
+            }
+            
+            // 금액 찾기
             const amounts = [];
-            const amountPatterns = [
-                /합계[\s:]*(\d{1,3}(?:,\d{3})*|\d+)/i,
-                /총[액금][\s:]*(\d{1,3}(?:,\d{3})*|\d+)/i,
-                /결제[\s:]*(\d{1,3}(?:,\d{3})*|\d+)/i,
-                /(\d{1,3}(?:,\d{3})+)원?/,
-                /(\d{4,})원?/
-            ];
-            
             for (const line of lines) {
-                for (const pattern of amountPatterns) {
-                    const match = line.match(pattern);
-                    if (match) {
-                        const numberStr = match[1] || match[0];
-                        const num = parseInt(numberStr.replace(/[^0-9]/g, ''));
-                        
-                        if (num >= 100 && num <= 10000000) {
-                            amounts.push({ value: num, line: line, pattern: pattern.toString() });
-                            console.log(`금액 후보: ${num}원 (${line})`);
+                const numbers = line.match(/\d{1,3}(?:,\d{3})*|\d+/g);
+                if (numbers) {
+                    numbers.forEach(num => {
+                        const parsed = parseInt(num.replace(/,/g, ''));
+                        if (parsed >= 100 && parsed <= 1000000) {
+                            amounts.push(parsed);
                         }
-                    }
+                    });
                 }
             }
+            amount = amounts.length > 0 ? Math.max(...amounts) : 0;
             
-            if (amounts.length > 0) {
-                // 우선순위: 합계 > 총액 > 결제 > 가장 큰 금액
-                const priorityAmount = amounts.find(a => 
-                    /합계|총[액금]|결제/i.test(a.line)
-                );
-                
-                amount = priorityAmount ? priorityAmount.value : Math.max(...amounts.map(a => a.value));
-                console.log('선택된 금액:', amount);
+            // 카테고리 분류
+            const textLower = text.toLowerCase();
+            if (textLower.includes('스타벅스') || textLower.includes('카페') || textLower.includes('커피')) {
+                category = '간식대';
+            } else if (textLower.includes('맥도날드') || textLower.includes('버거') || textLower.includes('식당')) {
+                category = '식대';
+            } else if (textLower.includes('gs25') || textLower.includes('편의점')) {
+                category = '간식대';
+            } else if (textLower.includes('주유') || textLower.includes('칼텍스')) {
+                category = '유류대';
+            } else if (textLower.includes('통행료')) {
+                category = '통행료';
+            } else if (textLower.includes('택시')) {
+                category = '택시비';
+            } else if (textLower.includes('지하철') || textLower.includes('버스')) {
+                category = '교통비';
+            } else {
+                category = '기타';
             }
-            
-            // 4. 카테고리 분류 (기존과 동일)
-            const fullTextLower = text.toLowerCase();
-            const businessLower = business.toLowerCase();
-            
-            const categoryRules = [
-                { keywords: ['스타벅스', 'starbucks', '카페', 'cafe', '커피', 'coffee'], category: '간식대' },
-                { keywords: ['맥도날드', 'mcdonald', '버거킹', 'burger', 'kfc'], category: '식대' },
-                { keywords: ['gs25', 'cu', '세븐일레븐', '7-eleven', '편의점'], category: '간식대' },
-                { keywords: ['이마트', 'emart', '홈플러스', '롯데마트', '마트'], category: '생필품' },
-                { keywords: ['칼텍스', 'caltex', 'sk에너지', 'sk energy', '주유소', 'gs칼텍스'], category: '유류대' },
-                { keywords: ['도로공사', '통행료', 'toll'], category: '통행료' },
-                { keywords: ['택시', 'taxi'], category: '택시비' },
-                { keywords: ['지하철', 'subway', '버스', 'bus', '교통카드'], category: '교통비' }
-            ];
-            
-            for (const rule of categoryRules) {
-                if (rule.keywords.some(keyword => 
-                    businessLower.includes(keyword) || fullTextLower.includes(keyword))) {
-                    category = rule.category;
-                    console.log(`카테고리 매치: ${category}`);
-                    break;
-                }
-            }
-            
-            const result = {
-                date: date || new Date().toISOString().split('T')[0],
-                business: business || '업체명 인식 실패',
-                amount: amount || 0,
-                category: category || '기타'
-            };
-            
-            console.log('=== 최종 파싱 결과 ===');
-            console.log(result);
-            
-            return result;
-        }
-        
-        // 시뮬레이션 결과
-        function getSimulationResult() {
-            const businesses = ['스타벅스', '맥도날드', 'GS25', '이마트'];
-            const business = businesses[Math.floor(Math.random() * businesses.length)];
             
             return {
-                date: new Date().toISOString().split('T')[0],
-                business: business + ' (시뮬레이션)',
-                amount: Math.floor(Math.random() * 30000) + 2000,
-                category: '간식대'
+                date: date || new Date().toISOString().split('T')[0],
+                business: business || '업체명 인식 실패',
+                amount: amount,
+                category: category
             };
         }
         
@@ -843,27 +483,73 @@
             document.getElementById('results').classList.add('show');
         }
         
+        // 이벤트 리스너 등록
+        function setupEvents() {
+            console.log('🔧 이벤트 리스너 설정 중...');
+            
+            const startBtn = document.getElementById('startBtn');
+            const captureBtn = document.getElementById('captureBtn');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const fileInput = document.getElementById('fileInput');
+            
+            // 카메라 시작 버튼
+            if (startBtn) {
+                startBtn.onclick = function() {
+                    console.log('👆 카메라 시작 버튼 클릭됨');
+                    startCamera();
+                };
+                console.log('✅ 카메라 시작 버튼 이벤트 등록됨');
+            }
+            
+            // 사진 촬영 버튼
+            if (captureBtn) {
+                captureBtn.onclick = function() {
+                    console.log('👆 사진 촬영 버튼 클릭됨');
+                    if (!captureBtn.disabled) {
+                        capturePhoto();
+                    }
+                };
+                console.log('✅ 사진 촬영 버튼 이벤트 등록됨');
+            }
+            
+            // 파일 업로드 버튼
+            if (uploadBtn) {
+                uploadBtn.onclick = function() {
+                    console.log('👆 파일 업로드 버튼 클릭됨');
+                    fileInput.click();
+                };
+                console.log('✅ 파일 업로드 버튼 이벤트 등록됨');
+            }
+            
+            // 파일 입력
+            if (fileInput) {
+                fileInput.onchange = handleFile;
+                console.log('✅ 파일 입력 이벤트 등록됨');
+            }
+            
+            updateStatus('🎉 모든 이벤트 리스너 등록 완료');
+        }
+        
         // 페이지 로드 시
-        window.addEventListener('load', function() {
+        window.onload = function() {
+            console.log('🌟 페이지 로드 완료');
             updateStatus('페이지 로드 완료');
             
-            // Tesseract.js 로드 확인
+            setupEvents();
+            
             setTimeout(() => {
-                if (typeof Tesseract !== 'undefined') {
-                    updateStatus('실제 OCR 준비 완료!');
-                    console.log('Tesseract.js 성공적으로 로드됨');
-                } else {
-                    updateStatus('OCR 라이브러리 로드 실패 - 시뮬레이션 모드');
-                    console.log('Tesseract.js 로드 실패');
-                }
+                updateStatus('🚀 네이버 Clova OCR 준비 완료! 버튼을 눌러보세요');
             }, 1000);
-        });
+        };
         
         // 에러 처리
-        window.addEventListener('error', function(e) {
-            console.error('스크립트 오류:', e);
-            updateStatus('스크립트 오류 발생: ' + e.message);
-        });
+        window.onerror = function(msg, url, line, col, error) {
+            console.error('💥 스크립트 오류:', msg, 'at', line + ':' + col);
+            updateStatus('❌ 스크립트 오류: ' + msg);
+            return false;
+        };
+        
+        console.log('✅ 스크립트 로드 완료');
     </script>
 </body>
 </html>
