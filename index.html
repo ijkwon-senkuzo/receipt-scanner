@@ -209,6 +209,8 @@
         // 전역 변수
         var stream = null;
         var imageData = null;
+        var GOOGLE_API_KEY = 'AIzaSyAJFZI4cabXII5j7WBwqJkbACiyEOioyrg';
+        var GOOGLE_VISION_URL = 'https://vision.googleapis.com/v1/images:annotate';
         var currentFacingMode = 'environment'; // 현재 카메라 모드
         
         // 상태 업데이트 함수
@@ -352,16 +354,186 @@
             reader.readAsDataURL(file);
         }
         
-        // 이미지 처리 (시뮬레이션)
+        // 이미지 처리 (실제 OCR)
         function processImage() {
-            updateStatus('이미지 분석 중...');
+            updateStatus('Google Vision API로 텍스트 인식 중...');
             
             // 로딩 표시
             document.getElementById('loading').className = 'loading show';
             document.getElementById('results').className = 'results';
             
-            // 2초 후 결과 표시 (시뮬레이션)
-            setTimeout(function() {
+            // 실제 Google Vision API 호출
+            performOCR(imageData)
+                .then(function(result) {
+                    // 결과 표시
+                    document.getElementById('resultDate').textContent = result.date;
+                    document.getElementById('resultBusiness').textContent = result.business;
+                    document.getElementById('resultAmount').textContent = result.amount.toLocaleString() + '원';
+                    document.getElementById('resultCategory').textContent = result.category;
+                    
+                    // 로딩 숨기고 결과 표시
+                    document.getElementById('loading').className = 'loading';
+                    document.getElementById('results').className = 'results show';
+                    
+                    updateStatus('OCR 분석 완료!');
+                })
+                .catch(function(error) {
+                    console.error('OCR 오류:', error);
+                    updateStatus('OCR 실패, 시뮬레이션 결과 표시');
+                    
+                    // OCR 실패 시 시뮬레이션으로 대체
+                    var result = getSimulationResult();
+                    document.getElementById('resultDate').textContent = result.date;
+                    document.getElementById('resultBusiness').textContent = result.business + ' (시뮬레이션)';
+                    document.getElementById('resultAmount').textContent = result.amount.toLocaleString() + '원';
+                    document.getElementById('resultCategory').textContent = result.category;
+                    
+                    document.getElementById('loading').className = 'loading';
+                    document.getElementById('results').className = 'results show';
+                });
+        }
+        
+        // Google Vision API 호출
+        function performOCR(imageDataUrl) {
+            return new Promise(function(resolve, reject) {
+                // base64 이미지 데이터에서 헤더 제거
+                var base64Image = imageDataUrl.split(',')[1];
+                
+                var requestBody = {
+                    requests: [{
+                        image: {
+                            content: base64Image
+                        },
+                        features: [{
+                            type: 'TEXT_DETECTION',
+                            maxResults: 10
+                        }]
+                    }]
+                };
+                
+                // API 요청
+                fetch(GOOGLE_VISION_URL + '?key=' + GOOGLE_API_KEY, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                })
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error('API 요청 실패: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(function(data) {
+                    console.log('Google Vision API 응답:', data);
+                    
+                    if (data.responses && data.responses[0] && data.responses[0].textAnnotations) {
+                        var fullText = data.responses[0].textAnnotations[0].description;
+                        console.log('인식된 텍스트:', fullText);
+                        var result = parseReceiptText(fullText);
+                        resolve(result);
+                    } else {
+                        throw new Error('텍스트를 인식할 수 없습니다');
+                    }
+                })
+                .catch(function(error) {
+                    console.error('API 오류:', error);
+                    reject(error);
+                });
+            });
+        }
+        
+        // 인식된 텍스트 분석
+        function parseReceiptText(text) {
+            var lines = text.split('\n').map(function(line) {
+                return line.trim();
+            }).filter(function(line) {
+                return line.length > 0;
+            });
+            
+            var date = '';
+            var business = '';
+            var amount = 0;
+            var category = '';
+            
+            // 날짜 추출
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var dateMatch = line.match(/(\d{4})[.-/](\d{1,2})[.-/](\d{1,2})/);
+                if (dateMatch) {
+                    var year = dateMatch[1];
+                    var month = dateMatch[2].padStart(2, '0');
+                    var day = dateMatch[3].padStart(2, '0');
+                    date = year + '-' + month + '-' + day;
+                    break;
+                }
+            }
+            
+            // 업체명 추출 (첫 번째 의미있는 텍스트)
+            for (var i = 0; i < Math.min(5, lines.length); i++) {
+                var line = lines[i];
+                if (line.length > 2 && 
+                    !line.match(/^\d+$/) && 
+                    !line.match(/\d{4}[.-/]\d{1,2}[.-/]\d{1,2}/) &&
+                    !line.includes('영수증') &&
+                    !line.includes('receipt')) {
+                    business = line;
+                    break;
+                }
+            }
+            
+            // 금액 추출
+            var amounts = [];
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var numberMatches = line.match(/[\d,]+/g);
+                if (numberMatches) {
+                    for (var j = 0; j < numberMatches.length; j++) {
+                        var cleanNumber = numberMatches[j].replace(/,/g, '');
+                        var num = parseInt(cleanNumber);
+                        if (num >= 100 && num <= 1000000) {
+                            amounts.push(num);
+                        }
+                    }
+                }
+            }
+            if (amounts.length > 0) {
+                amount = Math.max.apply(Math, amounts);
+            }
+            
+            // 적요 자동 분류
+            var fullTextLower = text.toLowerCase();
+            var businessLower = business.toLowerCase();
+            
+            if (businessLower.includes('스타벅스') || businessLower.includes('카페') || businessLower.includes('커피')) {
+                category = '간식대';
+            } else if (businessLower.includes('맥도날드') || businessLower.includes('버거') || businessLower.includes('식당')) {
+                category = '식대';
+            } else if (businessLower.includes('gs25') || businessLower.includes('편의점') || businessLower.includes('cu')) {
+                category = '간식대';
+            } else if (businessLower.includes('주유소') || businessLower.includes('칼텍스') || businessLower.includes('sk에너지')) {
+                category = '유류대';
+            } else if (businessLower.includes('한국도로공사') || fullTextLower.includes('통행료')) {
+                category = '통행료';
+            } else if (businessLower.includes('택시') || fullTextLower.includes('택시')) {
+                category = '택시비';
+            } else if (fullTextLower.includes('지하철') || fullTextLower.includes('버스')) {
+                category = '교통비';
+            } else {
+                category = '기타';
+            }
+            
+            return {
+                date: date || new Date().toISOString().split('T')[0],
+                business: business || '인식 실패',
+                amount: amount || 0,
+                category: category
+            };
+        }
+        
+        // 시뮬레이션 결과 (OCR 실패 시 백업)
+        function getSimulationResult() {
                 var businesses = ['스타벅스', '맥도날드', 'GS25', '이마트', '롯데리아'];
                 var categories = ['간식대', '식대', '생필품', '교통비'];
                 
